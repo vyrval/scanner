@@ -3,11 +3,13 @@
 // {
 //   version: 1,
 //   goals:    { kcal, prot, carbs, fat, fiber }         (null = non suivi)
+//   profile:  { weight }                               (kg)
+//   lastActivity: clé de la dernière activité saisie
 //   products: { [id]: { id, code, name, brand, quantity, image, nutriscore,
 //                        serving, per100, manual?, saved, lastUsed } }
 //   days:     { "YYYY-MM-DD": { meals: [{ id, name, time, entries: [
 //                   { id, productId, name, brand, qty, per100 } ] }],
-//                 activities: [{ id, name, minutes, kcal }] } }
+//                 activities: [{ id, type, name, minutes, kcal, manual }] } }
 // }
 // Chaque entrée garde une copie de per100 : l'historique ne bouge pas
 // si la fiche Open Food Facts change.
@@ -18,6 +20,8 @@ const listeners = new Set();
 const defaults = () => ({
   version: 1,
   goals: { kcal: 2000, prot: 120, carbs: 230, fat: 70, fiber: 30 },
+  profile: { weight: null },   // kg, pour le calcul des activités
+  lastActivity: "run-10",
   products: {},
   days: {},
 });

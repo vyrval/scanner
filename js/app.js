@@ -1,6 +1,7 @@
 import * as store from "./store.js";
 import * as off from "./off.js";
 import { startScanner, stopScanner } from "./scanner.js";
+import { ACTIVITY_GROUPS, OTHER, activityInfo, activityKcal } from "./activities.js";
 import {
   NUTRIENTS, esc, num, fmt, uid, scale, entryTotals, mealTotals, dayTotals,
   burnedKcal, sortMeals, todayKey, addDays, parseKey, nowTime, suggestMealName,
@@ -602,30 +603,83 @@ function editEntry(mealId, entryId) {
 }
 
 function editActivity(id) {
+  const s = store.getState();
   const a = id ? store.getDay(ui.date).activities.find((x) => x.id === id) : null;
+  const weight = s.profile?.weight ?? null;
+  // Une activité d'avant le calcul auto n'a pas de type : saisie libre.
+  const type0 = a ? (a.type ?? OTHER) : (activityInfo(s.lastActivity) ? s.lastActivity : "run-10");
+  let manual = a ? (a.manual ?? true) : false;
+
+  const options = ACTIVITY_GROUPS.map(([group, items]) =>
+    `<optgroup label="${group}">${items.map(([k, label]) =>
+      `<option value="${k}"${k === type0 ? " selected" : ""}>${label}</option>`).join("")}</optgroup>`).join("") +
+    `<option value="${OTHER}"${type0 === OTHER ? " selected" : ""}>Autre (saisie libre)</option>`;
+
   openSheet(`
     <h2 class="sheet-title">${a ? "Modifier l'activité" : "Nouvelle activité"}</h2>
-    <label class="flabel">Nom<input name="name" id="f-aname" required maxlength="40" placeholder="Course, vélo, muscu…" value="${esc(a?.name ?? "")}"></label>
+    <label class="flabel">Activité
+      <span class="selectwrap"><select name="type" id="f-atype">${options}</select>${ICON.down}</span>
+    </label>
+    <label class="flabel" id="f-aname-wrap"${type0 === OTHER ? "" : " hidden"}>Nom
+      <input name="name" id="f-aname" maxlength="40" placeholder="Paddle, ménage, jardinage…" value="${type0 === OTHER ? esc(a?.name ?? "") : ""}">
+    </label>
     <div class="grid2">
-      <label class="flabel">Durée (min)<input name="minutes" id="f-min" inputmode="numeric" required value="${a?.minutes ?? ""}"></label>
+      <label class="flabel">Durée (min)<input name="minutes" id="f-min" inputmode="numeric" required value="${a?.minutes ?? 30}"></label>
       <label class="flabel">Calories brûlées<input name="kcal" id="f-akcal" inputmode="numeric" required value="${a?.kcal ?? ""}"></label>
     </div>
+    <p class="muted small kcal-hint" id="kcalHint"></p>
     <div class="sheet-actions">
       ${a ? `<button value="delete" class="btn-outline danger" formnovalidate>Supprimer</button>`
           : `<button value="cancel" class="btn-outline" formnovalidate>Annuler</button>`}
       <button value="ok" class="cta">Enregistrer</button>
     </div>`, (action, fd) => {
-    store.update((s) => {
-      const d = store.ensureDay(s, ui.date);
+    store.update((st) => {
+      const d = store.ensureDay(st, ui.date);
       if (action === "delete") {
         d.activities = d.activities.filter((x) => x.id !== id);
-        return store.pruneDay(s, ui.date);
+        return store.pruneDay(st, ui.date);
       }
-      const data = { name: fd.get("name").trim(), minutes: num(fd.get("minutes")) ?? 0, kcal: num(fd.get("kcal")) ?? 0 };
+      const type = fd.get("type");
+      const name = type === OTHER ? fd.get("name").trim() : activityInfo(type).label;
+      const data = { type, name, minutes: num(fd.get("minutes")) ?? 0, kcal: num(fd.get("kcal")) ?? 0, manual };
       if (a) Object.assign(d.activities.find((x) => x.id === id), data);
       else d.activities.push({ id: uid(), ...data });
+      if (type !== OTHER) st.lastActivity = type;
     });
   });
+
+  const typeEl = $("#f-atype", sheet), minEl = $("#f-min", sheet), kcalEl = $("#f-akcal", sheet);
+  const nameWrap = $("#f-aname-wrap", sheet), nameEl = $("#f-aname", sheet), hint = $("#kcalHint", sheet);
+
+  // Toucher au chiffre = valeur forcée ; ce listener passe avant celui de la feuille.
+  kcalEl.addEventListener("input", () => { manual = true; });
+
+  sheet.onPreview = () => {
+    const type = typeEl.value;
+    const other = type === OTHER;
+    nameWrap.hidden = !other;
+    nameEl.required = other;
+    const minutes = num(minEl.value);
+    const calc = other ? null : activityKcal(type, weight, minutes);
+    if (!manual && calc != null) kcalEl.value = calc;
+
+    if (other) {
+      hint.textContent = "Activité libre : indique les calories toi-même.";
+    } else if (!weight) {
+      hint.innerHTML = `Pour le calcul automatique, indique ton poids. <button type="button" class="linkish accent" id="goWeight">Aller aux réglages</button>`;
+    } else if (manual && calc != null && num(kcalEl.value) !== calc) {
+      hint.innerHTML = `Valeur saisie à la main. <button type="button" class="linkish accent" id="recalc">Recalculer (${fmt(calc)} kcal)</button>`;
+    } else {
+      const met = activityInfo(type).met;
+      hint.textContent = `Estimation : ${fmt(met, 1)} MET × ${fmt(weight, 1)} kg × ${fmt(minutes ?? 0)} min, hors métabolisme de repos. Tu peux modifier le chiffre.`;
+    }
+  };
+
+  hint.addEventListener("click", (e) => {
+    if (e.target.id === "recalc") { manual = false; sheet.onPreview(); }
+    if (e.target.id === "goWeight") { sheet.close(); go("settings"); setTimeout(() => $("#p-weight")?.focus(), 50); }
+  });
+  sheet.onPreview();
 }
 
 // ======================================================================
@@ -710,6 +764,14 @@ function renderSettings() {
       <button class="back" data-act="back-day">${ICON.prev}Journée</button>
       <h1 class="title">Réglages</h1>
     </header>
+    <section class="card">
+      ${ruleHead("Profil")}
+      <div class="goal">
+        <label for="p-weight">Poids</label>
+        <span class="goal-in"><input id="p-weight" inputmode="decimal" placeholder="—" value="${s.profile?.weight ?? ""}"><span>kg</span></span>
+      </div>
+      <p class="muted small note">Sert à estimer les calories de tes activités.</p>
+    </section>
     <form class="card" id="goalsForm">
       ${ruleHead("Objectifs par jour")}
       ${rows.map(([k, l, u, tone]) => `
@@ -864,6 +926,11 @@ document.addEventListener("input", (e) => {
 
 document.addEventListener("change", (e) => {
   if (e.target.id === "mealSel") ui.mealId = e.target.value || null;
+  if (e.target.id === "p-weight") {
+    const w = num(e.target.value);
+    store.update((s) => { s.profile = { ...s.profile, weight: w && w > 0 ? w : null }; });
+    toast(w ? "Poids enregistré" : "Poids effacé");
+  }
   if (e.target.id === "importFile" && e.target.files[0]) { importBackup(e.target.files[0]); e.target.value = ""; }
 });
 

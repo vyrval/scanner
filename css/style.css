@@ -23,6 +23,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; }
 body {
   background: var(--bg); color: var(--ink); font: 16px/1.45 var(--sans);
@@ -156,7 +157,7 @@ svg.filled { fill: var(--accent); stroke: var(--accent); }
 .dayhead .eyebrow::first-letter { text-transform: uppercase; }
 
 .budget { background: var(--surface); border-radius: 22px; padding: 20px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 1px 0 var(--line); }
-.budget-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.budget-top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 4px 12px; }
 .budget-top > .num { padding-bottom: 4px; white-space: nowrap; }
 .bignum { display: flex; align-items: baseline; gap: 6px; }
 .bignum .display { font-size: 68px; line-height: .85; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
@@ -358,3 +359,13 @@ body.no-tabbar #toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before { animation: none !important; transition: none !important; }
 }
+
+/* ---------- Activités ---------- */
+.selectwrap { position: relative; display: flex; align-items: center; }
+.selectwrap select {
+  width: 100%; min-height: 48px; padding: 0 40px 0 12px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--surface); font-size: 16px; font-weight: 700; appearance: none; -webkit-appearance: none;
+}
+.selectwrap svg { position: absolute; right: 12px; pointer-events: none; color: var(--muted); width: 20px; height: 20px; }
+.kcal-hint { margin-top: -6px; line-height: 1.45; }
+.card .note { margin-top: 10px; line-height: 1.45; }
