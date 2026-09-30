@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Scanner nutrition</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;600;700&display=swap">
+<style>
+/* Layout : une colonne étroite façon étiquette nutritionnelle, scanner en haut, fiche produit en dessous */
+:root {
+  --bg: #f5f6f3; --surface: #ffffff; --fg: #1b1f1c; --muted: #5d665f;
+  --line: #d9ddd6; --accent: #1f7a4d; --accent-fg: #ffffff; --err: #b3261e;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #121513; --surface: #1b1f1c; --fg: #e8ece7; --muted: #9aa49c;
+    --line: #2e3530; --accent: #4cc38a; --accent-fg: #0d1a13; --err: #ff8a80; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--fg); font: 16px/1.5 var(--sans);
+  padding: env(safe-area-inset-top, 0px) 16px calc(env(safe-area-inset-bottom, 0px) + 24px); }
+main { max-width: 32rem; margin: 0 auto; display: grid; gap: 16px; padding-block: 16px; }
+h1 { font-size: 1.35rem; margin: 0; }
+.sub { margin: 0; color: var(--muted); font-size: .9rem; }
+
+.viewfinder { position: relative; background: #000; border-radius: 12px; overflow: hidden; aspect-ratio: 4/3; max-width: 100%; }
+video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.viewfinder::after { content: ""; position: absolute; left: 12%; right: 12%; top: 50%; height: 2px;
+  background: var(--accent); box-shadow: 0 0 12px var(--accent); opacity: .8; }
+.viewfinder .idle { position: absolute; inset: 0; display: grid; place-items: center; color: #cfd6d0; font-size: .95rem; text-align: center; padding: 16px; }
+
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+button, input { font: inherit; }
+button { border: 0; border-radius: 8px; padding: 10px 16px; font-weight: 600; cursor: pointer;
+  background: var(--accent); color: var(--accent-fg); }
+button.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input { flex: 1; min-width: 0; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--fg); font-family: var(--mono); letter-spacing: .04em; }
+
+.status { margin: 0; font-size: .9rem; color: var(--muted); min-height: 1.5em; }
+.status.err { color: var(--err); }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 12px; }
+.head { display: flex; gap: 12px; align-items: flex-start; }
+.head img { width: 72px; height: 72px; object-fit: contain; background: #fff; border-radius: 8px; flex: none; }
+.head > div { min-width: 0; }
+.name { font-weight: 700; font-size: 1.1rem; margin: 0; text-wrap: balance; }
+.meta { margin: 0; color: var(--muted); font-size: .9rem; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 999px; color: #fff; }
+.ns-a { background: #038141; } .ns-b { background: #85bb2f; } .ns-c { background: #e6a800; }
+.ns-d { background: #ee8100; } .ns-e { background: #e63e11; } .ns-x { background: #7a847c; }
+
+table { width: 100%; border-collapse: collapse; font-size: .95rem; }
+caption { text-align: left; font-weight: 700; padding-bottom: 6px; border-bottom: 6px solid var(--fg); }
+td { padding: 5px 0; border-bottom: 1px solid var(--line); }
+td:last-child { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+tr.sub-row td:first-child { padding-left: 16px; color: var(--muted); }
+tr.kcal td { font-weight: 700; font-size: 1.05rem; }
+.foot { font-size: .8rem; color: var(--muted); margin: 0; }
+a { color: var(--accent); }
+
+.history { display: grid; gap: 6px; }
+.history h2 { font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.history button { text-align: left; background: var(--surface); color: var(--fg); border: 1px solid var(--line); font-weight: 400;
+  display: flex; justify-content: space-between; gap: 12px; }
+.history button span:last-child { font-family: var(--mono); color: var(--muted); flex: none; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Scanner nutrition</h1>
+    <p class="sub">Données Open Food Facts · valeurs pour 100 g</p>
+  </header>
+
+  <div class="viewfinder" id="vf">
+    <video id="video" playsinline muted hidden></video>
+    <div class="idle" id="idle">Appuie sur « Scanner » et vise le code-barres</div>
+  </div>
+
+  <div class="row">
+    <button id="scanBtn">Scanner</button>
+    <button id="stopBtn" class="ghost" hidden>Arrêter</button>
+  </div>
+
+  <form class="row" id="manual">
+    <input id="code" inputmode="numeric" autocomplete="off" placeholder="Code-barres (ex. 3017620422003)" aria-label="Code-barres">
+    <button type="submit" class="ghost">Chercher</button>
+  </form>
+
+  <p class="status" id="status" role="status"></p>
+  <section id="result" hidden></section>
+  <section class="history" id="history" hidden><h2>Récents</h2><div id="histList" class="history"></div></section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const video = $("video"), statusEl = $("status");
+const FIELDS = "product_name,product_name_fr,brands,quantity,image_front_small_url,nutriscore_grade,nova_group,nutriments,serving_size";
+let stream = null, running = false, zxingControls = null;
+
+function setStatus(msg, err = false) { statusEl.textContent = msg; statusEl.classList.toggle("err", err); }
+
+// ---------- Scan ----------
+async function startScan() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    return setStatus("Caméra indisponible : la page doit être servie en HTTPS (ou localhost).", true);
+  }
+  $("idle").hidden = true; video.hidden = false;
+  $("scanBtn").hidden = true; $("stopBtn").hidden = false;
+  setStatus("Recherche d'un code-barres…");
+  running = true;
+
+  if ("BarcodeDetector" in window) {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      video.srcObject = stream; await video.play();
+      const det = new BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e"] });
+      const tick = async () => {
+        if (!running) return;
+        try {
+          const codes = await det.detect(video);
+          if (codes.length) return onCode(codes[0].rawValue);
+        } catch {}
+        requestAnimationFrame(tick);
+      };
+      return tick();
+    } catch (e) { stopScan(); return setStatus("Accès caméra refusé : " + e.message, true); }
+  }
+
+  // Repli (Safari/iOS, Firefox) : ZXing chargé à la demande
+  try {
+    await loadScript("https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js");
+    const hints = new Map();
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E]);
+    const reader = new ZXing.BrowserMultiFormatReader(hints);
+    zxingControls = reader;
+    await reader.decodeFromConstraints({ video: { facingMode: "environment" } }, video, (res) => {
+      if (res && running) onCode(res.getText());
+    });
+  } catch (e) { stopScan(); setStatus("Impossible de démarrer le scan : " + e.message, true); }
+}
+
+function stopScan() {
+  running = false;
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  if (zxingControls) { try { zxingControls.reset(); } catch {} zxingControls = null; }
+  video.hidden = true; $("idle").hidden = false;
+  $("scanBtn").hidden = false; $("stopBtn").hidden = true;
+}
+
+function onCode(code) {
+  stopScan();
+  navigator.vibrate?.(60);
+  $("code").value = code;
+  lookup(code);
+}
+
+function loadScript(src) {
+  return new Promise((ok, ko) => {
+    if (window.ZXing) return ok();
+    const s = document.createElement("script");
+    s.src = src; s.onload = ok; s.onerror = () => ko(new Error("chargement de la librairie échoué"));
+    document.head.appendChild(s);
+  });
+}
+
+// ---------- API Open Food Facts ----------
+async function lookup(code) {
+  code = code.replace(/\D/g, "");
+  if (code.length < 8) return setStatus("Code-barres trop court.", true);
+  setStatus("Recherche de " + code + "…");
+  $("result").hidden = true;
+  try {
+    const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=${FIELDS}`);
+    const data = await r.json();
+    if (data.status !== 1 || !data.product) {
+      return setStatus(`Produit ${code} absent d'Open Food Facts. Tu peux l'ajouter sur openfoodfacts.org.`, true);
+    }
+    setStatus("");
+    render(code, data.product);
+    remember(code, data.product);
+  } catch (e) {
+    setStatus("Erreur réseau : " + e.message, true);
+  }
+}
+
+// ---------- Affichage ----------
+const fmt = (v, unit, d = 1) => (v === undefined || v === null || v === "") ? "—" : `${(+v).toFixed(d).replace(".", ",")} ${unit}`;
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function render(code, p) {
+  const n = p.nutriments || {};
+  const kcal = n["energy-kcal_100g"] ?? (n["energy_100g"] ? n["energy_100g"] / 4.184 : undefined);
+  const name = p.product_name_fr || p.product_name || "Produit sans nom";
+  const ns = (p.nutriscore_grade || "").toLowerCase();
+  const nsChip = /^[a-e]$/.test(ns) ? `<span class="chip ns-${ns}">Nutri-Score ${ns.toUpperCase()}</span>` : "";
+  const novaChip = p.nova_group ? `<span class="chip ns-x">NOVA ${p.nova_group}</span>` : "";
+  const rows = [
+    ["kcal", "Énergie", fmt(kcal, "kcal", 0)],
+    ["", "Matières grasses", fmt(n.fat_100g, "g")],
+    ["sub-row", "dont acides gras saturés", fmt(n["saturated-fat_100g"], "g")],
+    ["", "Glucides", fmt(n.carbohydrates_100g, "g")],
+    ["sub-row", "dont sucres", fmt(n.sugars_100g, "g")],
+    ["", "Fibres", fmt(n.fiber_100g, "g")],
+    ["", "Protéines", fmt(n.proteins_100g, "g")],
+    ["", "Sel", fmt(n.salt_100g, "g", 2)],
+  ].map(([c, l, v]) => `<tr class="${c}"><td>${l}</td><td>${v}</td></tr>`).join("");
+
+  $("result").innerHTML = `
+    <div class="card">
+      <div class="head">
+        ${p.image_front_small_url ? `<img src="${esc(p.image_front_small_url)}" alt="">` : ""}
+        <div>
+          <p class="name">${esc(name)}</p>
+          <p class="meta">${esc([p.brands, p.quantity].filter(Boolean).join(" · "))}</p>
+          <div class="chips">${nsChip}${novaChip}</div>
+        </div>
+      </div>
+      <table><caption>Pour 100 g</caption><tbody>${rows}</tbody></table>
+      <p class="foot">${p.serving_size ? "Portion indiquée : " + esc(p.serving_size) + " · " : ""}
+        <a href="https://world.openfoodfacts.org/product/${code}" target="_blank" rel="noopener">Fiche ${code}</a></p>
+    </div>`;
+  $("result").hidden = false;
+}
+
+// ---------- Historique local ----------
+function loadHist() { try { return JSON.parse(localStorage.getItem("scan-hist") || "[]"); } catch { return []; } }
+function remember(code, p) {
+  const h = loadHist().filter(x => x.code !== code);
+  h.unshift({ code, name: p.product_name_fr || p.product_name || code });
+  try { localStorage.setItem("scan-hist", JSON.stringify(h.slice(0, 10))); } catch {}
+  drawHist();
+}
+function drawHist() {
+  const h = loadHist();
+  $("history").hidden = !h.length;
+  $("histList").innerHTML = h.map(x => `<button data-code="${esc(x.code)}"><span>${esc(x.name)}</span><span>${esc(x.code)}</span></button>`).join("");
+}
+$("histList").addEventListener("click", e => {
+  const b = e.target.closest("button[data-code]");
+  if (b) { $("code").value = b.dataset.code; lookup(b.dataset.code); }
+});
+
+$("scanBtn").addEventListener("click", startScan);
+$("stopBtn").addEventListener("click", () => { stopScan(); setStatus(""); });
+$("manual").addEventListener("submit", e => { e.preventDefault(); lookup($("code").value); });
+drawHist();
+</script>
+</body>
+</html>
