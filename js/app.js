@@ -40,6 +40,8 @@ const ICON = {
   search: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg>`,
   plus: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>`,
   minus: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>`,
+  more: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg>`,
+  trash: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>`,
 };
 
 const findProduct = (id) => store.getState().products[id] ?? cache.get(id);
@@ -218,7 +220,8 @@ function renderDay() {
     <article class="tl">
       <div class="tl-rail"><span class="num">${m.time}</span><i></i></div>
       <div class="card">
-        ${ruleHead(esc(m.name), `<span class="num">${fmt(mealTotals(m).kcal)} kcal</span>`,
+        ${ruleHead(esc(m.name), `<span class="rule-right"><span class="num">${fmt(mealTotals(m).kcal)} kcal</span>
+          <button class="more" data-act="edit-meal" data-meal="${m.id}" aria-label="Modifier ou supprimer ${esc(m.name)}">${ICON.more}</button></span>`,
           `data-act="edit-meal" data-meal="${m.id}" aria-label="Modifier le repas ${esc(m.name)}"`)}
         ${m.entries.length ? m.entries.map((e) => `
           <button class="line" data-act="edit-entry" data-meal="${m.id}" data-entry="${e.id}">
@@ -319,7 +322,8 @@ function productRows(items, quick) {
       <button class="prow-main" data-act="open-product" data-id="${esc(p.id)}">
         ${thumb(p)}
         <span class="prow-text"><span class="pname">${esc(p.name)}</span>
-          <small class="num">${fmt(p.per100.kcal)} kcal / 100 g${p.nutriscore ? ` · Nutri-Score ${p.nutriscore.toUpperCase()}` : ""}</small></span>
+          <small class="num">${[p.per100.kcal != null ? `${fmt(p.per100.kcal)} kcal / 100 g` : esc(p.brand),
+            p.nutriscore ? `Nutri-Score ${p.nutriscore.toUpperCase()}` : ""].filter(Boolean).join(" · ")}</small></span>
       </button>
       ${quick ? `<button class="quick num" data-act="quick-add" data-id="${esc(p.id)}" aria-label="Ajouter ${fmt(quickQty(p))} g de ${esc(p.name)}">+ ${fmt(quickQty(p))} g</button>` : ""}
     </div>`).join("")}</div>`;
@@ -356,6 +360,7 @@ async function doSearch(q) {
   ui.query = q;
   if (!q) { ui.results = null; setStatus(""); return renderResults(); }
   if (/^\d{8,14}$/.test(q)) return lookupCode(q);
+  if (q.length < 2) return setStatus("Tape au moins 2 lettres.", true);
   setStatus("Recherche…");
   try {
     const res = await off.search(q);
@@ -531,31 +536,34 @@ function newMeal() {
   });
 }
 
+function deleteMeal(mealId) {
+  const date = ui.date;
+  const day = store.getDay(date);
+  const meal = day.meals.find((m) => m.id === mealId);
+  if (!meal) return;
+  const backup = JSON.parse(JSON.stringify(meal));
+  store.update((s) => {
+    const d = store.ensureDay(s, date);
+    d.meals = d.meals.filter((m) => m.id !== mealId);
+    store.pruneDay(s, date);
+  });
+  toast(`${meal.name} supprimé`, {
+    label: "Annuler",
+    run: () => store.update((s) => { store.ensureDay(s, date).meals.push(backup); }),
+  });
+}
+
 function editMeal(mealId) {
   const meal = store.getDay(ui.date).meals.find((m) => m.id === mealId);
   if (!meal) return;
-  let armed = false;
   openSheet(`
     <h2 class="sheet-title">Modifier le repas</h2>
     <label class="flabel">Nom<input name="name" id="f-name" required maxlength="40" value="${esc(meal.name)}"></label>
     <label class="flabel">Heure<input name="time" id="f-time" type="time" required value="${meal.time}"></label>
-    <div class="sheet-actions">
-      <button value="delete" class="btn-outline danger" id="delBtn" formnovalidate>Supprimer</button>
-      <button value="ok" class="cta">Enregistrer</button>
-    </div>`, (action, fd) => {
-    if (action === "delete") {
-      if (!armed) {
-        armed = true;
-        $("#delBtn", sheet).textContent = meal.entries.length ? `Supprimer ${meal.entries.length} aliment(s) ?` : "Confirmer";
-        return false;
-      }
-      store.update((s) => {
-        const d = store.ensureDay(s, ui.date);
-        d.meals = d.meals.filter((m) => m.id !== mealId);
-        store.pruneDay(s, ui.date);
-      });
-      return;
-    }
+    <button value="ok" class="cta">Enregistrer</button>
+    <button value="delete" class="btn-outline danger wide" formnovalidate>${ICON.trash}Supprimer le repas${meal.entries.length ? ` (${meal.entries.length} aliment${meal.entries.length > 1 ? "s" : ""})` : ""}</button>`,
+  (action, fd) => {
+    if (action === "delete") return deleteMeal(mealId);
     store.update((s) => {
       const m = store.ensureDay(s, ui.date).meals.find((x) => x.id === mealId);
       m.name = fd.get("name").trim();
@@ -855,12 +863,37 @@ sheet.addEventListener("click", (e) => { if (e.target === sheet) sheet.close(); 
 sheet.addEventListener("input", () => sheet.onPreview?.());
 
 let toastTimer;
-function toast(msg) {
+let toastAction = null;
+function toast(msg, action = null) {
   const el = $("#toast");
-  el.textContent = msg;
+  el.innerHTML = `<span>${esc(msg)}</span>${action ? `<button type="button" id="toastBtn">${esc(action.label)}</button>` : ""}`;
+  toastAction = action;
   el.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (el.hidden = true), 2600);
+  toastTimer = setTimeout(() => { el.hidden = true; toastAction = null; }, action ? 6000 : 2600);
+}
+$("#toast").addEventListener("click", (e) => {
+  if (e.target.id !== "toastBtn" || !toastAction) return;
+  const run = toastAction.run;
+  toastAction = null;
+  $("#toast").hidden = true;
+  run();
+});
+
+// Résultat de recherche : on recharge la fiche complète (valeurs nutritionnelles, photo).
+async function openFromSearch(id) {
+  if (store.getState().products[id]) return openProduct(id);
+  setStatus("Chargement de la fiche…");
+  try {
+    const p = await off.getByCode(id);
+    if (p) cache.set(id, p);
+    setStatus("");
+  } catch (e) {
+    if (cache.get(id)?.per100.kcal == null) return setStatus(e.message, true);
+    setStatus("");
+  }
+  if (cache.get(id)?.per100.kcal == null) return setStatus("Ce produit n'a pas de valeurs nutritionnelles sur Open Food Facts.", true);
+  openProduct(id);
 }
 
 // ======================================================================
@@ -880,7 +913,7 @@ const actions = {
   "edit-activity": (d) => editActivity(d.id),
   scan,
   "stop-scan": () => { stopScan(); setStatus(""); },
-  "open-product": (d) => openProduct(d.id),
+  "open-product": (d) => (ui.view === "add" && ui.results ? openFromSearch(d.id) : openProduct(d.id)),
   "quick-add": (d) => quickAdd(d.id),
   "toggle-save": (d) => toggleSave(d.id),
   tab: (d) => { ui[d.group] = d.tab; d.group === "ptab" ? renderPLists() : renderResults(); },

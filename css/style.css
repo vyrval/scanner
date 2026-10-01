@@ -369,3 +369,20 @@ body.no-tabbar #toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); }
 .selectwrap svg { position: absolute; right: 12px; pointer-events: none; color: var(--muted); width: 20px; height: 20px; }
 .kcal-hint { margin-top: -6px; line-height: 1.45; }
 .card .note { margin-top: 10px; line-height: 1.45; }
+
+/* ---------- Menu repas, toast avec action ---------- */
+.rule-right { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.more {
+  width: 40px; height: 40px; margin: -10px -10px -10px 0; padding: 0; border: 0; border-radius: 20px;
+  background: none; color: var(--muted); display: flex; align-items: center; justify-content: center;
+}
+.more svg { width: 22px; height: 22px; stroke-width: 2.4; }
+.btn-outline.wide { width: 100%; gap: 8px; min-height: 52px; }
+.btn-outline.wide svg { width: 20px; height: 20px; }
+#toast { display: flex; align-items: center; gap: 14px; }
+#toast[hidden] { display: none; }
+#toast button {
+  border: 0; background: none; padding: 8px 4px; margin: -8px -4px; min-height: 40px;
+  color: var(--accent); font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; flex-shrink: 0;
+}
+@media (prefers-color-scheme: dark) { #toast button { color: var(--accent-ink); } }
