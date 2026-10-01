@@ -6,10 +6,14 @@
 //   en-têtes CORS, ce que le navigateur affiche comme « Failed to fetch » :
 //   il ne sert plus que de secours. 10 req/min pour la recherche.
 
-const FIELDS = [
+import { extractQuality, QUALITY_FIELDS } from "./quality.js";
+
+const BASE_FIELDS = [
   "code", "product_name", "product_name_fr", "brands", "quantity",
   "image_front_small_url", "nutriscore_grade", "nutriments", "serving_quantity",
-].join(",");
+];
+const FIELDS = [...BASE_FIELDS, ...QUALITY_FIELDS].join(",");
+const SEARCH_FIELDS = [...BASE_FIELDS, "nova_group"].join(",");
 
 const n = (v) => {
   const x = typeof v === "string" ? parseFloat(v) : v;
@@ -39,6 +43,7 @@ export function normalize(p) {
     image: text(p.image_front_small_url),
     nutriscore: /^[a-e]$/.test(grade) ? grade : "",
     serving: n(p.serving_quantity) || null,
+    nova: [1, 2, 3, 4].includes(Number(p.nova_group)) ? Number(p.nova_group) : null,
     per100: {
       kcal: n(nu["energy-kcal_100g"]) ?? (kj != null ? kj / 4.184 : null),
       prot: n(nu.proteins_100g),
@@ -75,23 +80,26 @@ async function getJSON(url, timeoutMs = 12000) {
   }
 }
 
+// Fiche complète : valeurs nutritionnelles + transformation, additifs, etc.
 export async function getByCode(code) {
   const data = await getJSON(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=${FIELDS}`);
-  return data.status === 1 && data.product ? normalize({ code, ...data.product }) : null;
+  if (data.status !== 1 || !data.product) return null;
+  const raw = { code, ...data.product };
+  return { ...normalize(raw), quality: extractQuality(raw) };
 }
 
 const clean = (list) => list.filter((p) => p.code && /^\d{6,14}$/.test(p.code)).map(normalize);
 
 async function searchNew(q) {
   const url = "https://search.openfoodfacts.org/search" +
-    `?q=${encodeURIComponent(q)}&langs=fr&page_size=30&fields=${FIELDS}`;
+    `?q=${encodeURIComponent(q)}&langs=fr&page_size=30&fields=${SEARCH_FIELDS}`;
   const data = await getJSON(url);
   return clean(data.hits || []);
 }
 
 async function searchLegacy(q) {
   const url = "https://world.openfoodfacts.org/cgi/search.pl?action=process&json=1&search_simple=1" +
-    `&search_terms=${encodeURIComponent(q)}&page_size=30&lc=fr&cc=fr&fields=${FIELDS}`;
+    `&search_terms=${encodeURIComponent(q)}&page_size=30&lc=fr&cc=fr&fields=${SEARCH_FIELDS}`;
   const data = await getJSON(url, 15000);
   return clean(data.products || []);
 }

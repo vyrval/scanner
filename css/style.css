@@ -386,3 +386,28 @@ body.no-tabbar #toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); }
   color: var(--accent); font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; flex-shrink: 0;
 }
 @media (prefers-color-scheme: dark) { #toast button { color: var(--accent-ink); } }
+
+/* ---------- Composition / NOVA ---------- */
+:root { --n1: #1E7B34; --n2: #8A6A00; --n3: #C25A00; --n4: #C0262D; --tag-bg: var(--soft); }
+@media (prefers-color-scheme: dark) { :root { --n1: #4CC36A; --n2: #E6C34A; --n3: #FF9A4D; --n4: #FF6B6B; } }
+.chips.tight { gap: 6px; }
+.nova { font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 3px 8px; border-radius: 99px; color: #FFFFFF; }
+.nova-1 { background: #1E7B34; } .nova-2 { background: #8A6A00; } .nova-3 { background: #C25A00; } .nova-4 { background: #C0262D; }
+.quality { display: flex; flex-direction: column; gap: 14px; }
+.nova-row { display: flex; align-items: center; gap: 14px; }
+.nova-scale { display: flex; gap: 3px; flex-shrink: 0; }
+.nova-scale i {
+  width: 26px; height: 34px; border-radius: 6px; background: var(--track); color: var(--muted);
+  display: flex; align-items: center; justify-content: center; font-style: normal;
+  font-family: var(--mono); font-size: 13px; font-weight: 600;
+}
+.nova-scale i.on { color: #FFFFFF; height: 40px; font-size: 16px; }
+.nova-scale i.nova-1 { background: #1E7B34; } .nova-scale i.nova-2 { background: #8A6A00; }
+.nova-scale i.nova-3 { background: #C25A00; } .nova-scale i.nova-4 { background: #C0262D; }
+.nova-row strong { font-size: 16px; }
+.qline { display: flex; flex-direction: column; gap: 6px; }
+.tag { font-family: var(--mono); font-size: 12px; font-weight: 600; padding: 4px 8px; border-radius: 8px; background: var(--tag-bg); color: var(--ink); }
+.tag.good { font-family: var(--sans); background: var(--accent-soft); color: var(--accent-ink); }
+.tag.bad { font-family: var(--sans); background: color-mix(in srgb, var(--n4) 14%, var(--surface)); color: var(--n4); }
+.ingr summary { cursor: pointer; font-size: 14px; font-weight: 700; min-height: 32px; display: flex; align-items: center; }
+.ingr p { margin-top: 6px; line-height: 1.5; color: var(--muted); }

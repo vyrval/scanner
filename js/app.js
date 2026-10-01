@@ -2,6 +2,7 @@ import * as store from "./store.js";
 import * as off from "./off.js";
 import { startScanner, stopScanner } from "./scanner.js";
 import { ACTIVITY_GROUPS, OTHER, activityInfo, activityKcal } from "./activities.js";
+import { NOVA } from "./quality.js";
 import {
   NUTRIENTS, esc, num, fmt, uid, scale, entryTotals, mealTotals, dayTotals,
   burnedKcal, sortMeals, todayKey, addDays, parseKey, nowTime, suggestMealName,
@@ -323,7 +324,7 @@ function productRows(items, quick) {
         ${thumb(p)}
         <span class="prow-text"><span class="pname">${esc(p.name)}</span>
           <small class="num">${[p.per100.kcal != null ? `${fmt(p.per100.kcal)} kcal / 100 g` : esc(p.brand),
-            p.nutriscore ? `Nutri-Score ${p.nutriscore.toUpperCase()}` : ""].filter(Boolean).join(" · ")}</small></span>
+            p.nutriscore ? `Nutri-Score ${p.nutriscore.toUpperCase()}` : "", novaOf(p) ? `NOVA ${novaOf(p)}` : ""].filter(Boolean).join(" · ")}</small></span>
       </button>
       ${quick ? `<button class="quick num" data-act="quick-add" data-id="${esc(p.id)}" aria-label="Ajouter ${fmt(quickQty(p))} g de ${esc(p.name)}">+ ${fmt(quickQty(p))} g</button>` : ""}
     </div>`).join("")}</div>`;
@@ -423,7 +424,62 @@ const storable = (p) => ({
   id: p.id, code: p.code ?? null, name: p.name, brand: p.brand ?? "", quantity: p.quantity ?? "",
   image: p.image ?? "", nutriscore: p.nutriscore ?? "", serving: p.serving ?? null,
   per100: { ...p.per100 }, ...(p.manual ? { manual: true } : {}),
+  ...(p.quality ? { quality: p.quality, nova: p.quality.nova } : p.nova ? { nova: p.nova } : {}),
 });
+
+const novaOf = (p) => p?.quality?.nova ?? p?.nova ?? null;
+const novaChip = (g) => (g ? `<span class="nova nova-${g}" title="${NOVA[g].desc}">NOVA ${g} · ${NOVA[g].label}</span>` : "");
+
+function qualityBlock(p) {
+  if (p.manual) return "";
+  const q = p.quality;
+  if (!q) return `<section class="quality" id="quality"><p class="muted small">Chargement de la composition…</p></section>`;
+  const nova = q.nova;
+  const pills = [
+    q.organic ? `<span class="tag good">Bio</span>` : "",
+    q.palmOil === true ? `<span class="tag bad">Huile de palme</span>` : q.palmOil === false ? `<span class="tag good">Sans huile de palme</span>` : "",
+  ].join("");
+  return `
+    <section class="quality" id="quality">
+      <div class="rule-head"><h2>Composition</h2></div>
+      ${nova ? `
+        <div class="nova-row">
+          <span class="nova-scale" aria-hidden="true">${[1, 2, 3, 4].map((g) => `<i class="${g === nova ? `on nova-${g}` : ""}">${g}</i>`).join("")}</span>
+          <div class="stack-2"><strong>${NOVA[nova].label}</strong><span class="muted small">${NOVA[nova].desc}</span></div>
+        </div>
+        ${nova === 4 && q.novaWhy.length ? `<p class="small"><span class="muted">Marqueurs d'ultra-transformation :</span> ${q.novaWhy.map(esc).join(", ")}</p>` : ""}`
+      : `<p class="muted small">Degré de transformation (NOVA) non renseigné pour ce produit.</p>`}
+      ${pills ? `<div class="chips tight">${pills}</div>` : ""}
+      <div class="qline"><span class="eyebrow">Additifs · ${q.additives.length}</span>
+        ${q.additives.length ? `<div class="chips tight">${q.additives.map((a) => `<span class="tag">${esc(a)}</span>`).join("")}</div>` : `<span class="small">Aucun additif indiqué</span>`}</div>
+      <div class="qline"><span class="eyebrow">Allergènes</span>
+        <span class="small">${q.allergens.length ? q.allergens.map(esc).join(", ") : "Aucun allergène indiqué"}</span></div>
+      ${q.ingredients ? `<details class="ingr"><summary>Ingrédients</summary><p class="small">${esc(q.ingredients)}</p></details>` : ""}
+    </section>`;
+}
+
+// Produit enregistré avant cette version, ou trouvé par recherche : on complète en arrière-plan.
+async function ensureQuality(id) {
+  const p = findProduct(id);
+  if (!p || p.manual || p.quality?.checked || !p.code) return;
+  try {
+    const full = await off.getByCode(p.code);
+    if (!full) throw new Error();
+    cache.set(id, { ...p, ...full });
+    if (store.getState().products[id]) {
+      store.update((s) => { s.products[id] = { ...s.products[id], quality: full.quality, nova: full.quality.nova }; });
+    }
+    const box = $("#quality", sheet);
+    if (sheet.open && box) {
+      box.outerHTML = qualityBlock({ ...p, quality: full.quality });
+      $("#novaHead", sheet)?.replaceChildren();
+      $("#novaHead", sheet)?.insertAdjacentHTML("beforeend", novaChip(full.quality.nova));
+    }
+  } catch {
+    const box = $("#quality", sheet);
+    if (box) box.innerHTML = `<p class="muted small">Composition indisponible hors connexion.</p>`;
+  }
+}
 
 function mealNameFor(choice) {
   const m = store.getDay(ui.date).meals.find((x) => x.id === choice);
@@ -443,7 +499,7 @@ function openProduct(id) {
       <div class="phead-text">
         <h2 class="display">${esc(p.name)}</h2>
         <span class="muted small">${esc([p.brand, p.quantity].filter(Boolean).join(" · ")) || (p.manual ? "Recette perso" : "")}</span>
-        ${nutriChip(p.nutriscore)}
+        <span class="chips tight">${nutriChip(p.nutriscore)}<span id="novaHead">${novaChip(novaOf(p))}</span></span>
       </div>
       <button type="button" class="iconbtn" id="starBtn" data-act="toggle-save" data-id="${esc(id)}"
         aria-pressed="${!!stored?.saved}" aria-label="Enregistrer le produit">${stored?.saved ? ICON.starFill : ICON.star}</button>
@@ -452,6 +508,7 @@ function openProduct(id) {
     <div class="result" id="preview"></div>
     ${mealPicker(ui.mealId, `Repas · ${dayWord}`)}
     <button value="add" class="cta" id="cta">Ajouter</button>
+    ${qualityBlock(p)}
     ${nutritionLabel(p)}
     ${p.code && !p.manual ? `<p class="muted small center"><a href="https://world.openfoodfacts.org/product/${esc(p.code)}" target="_blank" rel="noopener">Voir sur Open Food Facts</a></p>` : ""}
   `, (_, fd) => {
@@ -468,6 +525,7 @@ function openProduct(id) {
     $("#cta", sheet).textContent = `Ajouter ${toMeal(mealNameFor(choice))}`;
   };
   sheet.onPreview();
+  ensureQuality(id);
 }
 
 function addEntry(p, qty, mealChoice) {
@@ -484,7 +542,9 @@ function addEntry(p, qty, mealChoice) {
     mealName = meal.name;
     meal.entries.push({ id: uid(), productId: p.id, name: p.name, brand: p.brand ?? "", qty, per100: { ...p.per100 } });
     const cur = s.products[p.id];
-    s.products[p.id] = { ...storable(p), saved: cur?.saved ?? false, lastUsed: Date.now(), lastQty: qty };
+    const fresh = cache.get(p.id) ?? p; // peut avoir été complété en arrière-plan
+    const quality = fresh.quality ?? cur?.quality;
+    s.products[p.id] = { ...storable({ ...fresh, ...(quality ? { quality } : {}) }), saved: cur?.saved ?? false, lastUsed: Date.now(), lastQty: qty };
   });
   toast(`${p.name} · ${fmt(qty)} g ajouté ${toMeal(mealName)}`);
 }
