@@ -6,7 +6,7 @@ import { NOVA, QUALITY_VERSION } from "./quality.js";
 import { VERSION } from "./version.js";
 import {
   NUTRIENTS, esc, num, fmt, uid, scale, entryTotals, mealTotals, dayTotals,
-  burnedKcal, sortMeals, todayKey, addDays, parseKey, nowTime, suggestMealName,
+  burnedKcal, sortMeals, todayKey, addDays, parseKey, keyOf, nowTime, suggestMealName,
 } from "./util.js";
 
 const $ = (s, root = document) => root.querySelector(s);
@@ -250,7 +250,7 @@ function renderDay() {
     <header class="dayhead">
       <div class="stack-4 grow">
         <span class="eyebrow">${longDate(ui.date)}</span>
-        <button class="linkish" data-act="today"><h1 class="title">${relLabel(ui.date)}</h1></button>
+        <button class="linkish datebtn" data-act="calendar" aria-label="Choisir une date"><h1 class="title">${relLabel(ui.date)}</h1>${ICON.down}</button>
       </div>
       <button class="iconbtn" data-act="prev-day" aria-label="Jour précédent">${ICON.prev}</button>
       <button class="iconbtn" data-act="next-day" aria-label="Jour suivant">${ICON.next}</button>
@@ -273,6 +273,77 @@ function renderDay() {
         </button>`).join("")}
       <button class="dashed" data-act="new-activity">+ Activité</button>
     </section>`;
+}
+
+// ======================================================================
+// Calendrier
+// ======================================================================
+const WEEKDAYS = ["L", "M", "M", "J", "V", "S", "D"];
+
+// État d'un jour : rien, dans le budget, ou au-dessus.
+function dayStatus(key) {
+  const d = store.getState().days[key];
+  if (!d) return null;
+  const hasFood = d.meals.some((m) => m.entries.length);
+  if (!hasFood && !d.activities.length) return null;
+  const goal = store.getState().goals.kcal;
+  if (!goal || !hasFood) return "logged";
+  return dayTotals(d).kcal > goal + burnedKcal(d) ? "over" : "ok";
+}
+
+function calendarGrid(month) { // month : Date au 1er du mois
+  const first = new Date(month.getFullYear(), month.getMonth(), 1);
+  const offset = (first.getDay() + 6) % 7; // lundi = 0
+  const days = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+  const today = todayKey();
+  const cells = [];
+  for (let i = 0; i < offset; i++) cells.push(`<span></span>`);
+  for (let n = 1; n <= days; n++) {
+    const key = keyOf(new Date(month.getFullYear(), month.getMonth(), n));
+    const st = dayStatus(key);
+    const cls = ["cal-day", key === today ? "is-today" : "", key === ui.date ? "is-sel" : "", key > today ? "is-future" : ""].filter(Boolean).join(" ");
+    const label = parseKey(key).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) +
+      (st === "ok" ? ", dans l'objectif" : st === "over" ? ", objectif dépassé" : st ? ", données saisies" : "");
+    cells.push(`<button type="button" class="${cls}" data-act="cal-pick" data-day="${key}" aria-label="${label}"${key === ui.date ? ' aria-current="date"' : ""}>
+      <span class="num">${n}</span>${st ? `<i class="dot st-${st}"></i>` : ""}</button>`);
+  }
+  const title = month.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  const count = Object.keys(store.getState().days).filter((k) => k.startsWith(keyOf(month).slice(0, 7)) && dayStatus(k)).length;
+  return `
+    <div class="cal-head">
+      <button type="button" class="iconbtn" data-act="cal-month" data-dir="-1" aria-label="Mois précédent">${ICON.prev}</button>
+      <div class="stack-2 center"><strong class="cal-title">${cap(title)}</strong><span class="muted small">${count ? `${count} jour${count > 1 ? "s" : ""} renseigné${count > 1 ? "s" : ""}` : "Aucune donnée"}</span></div>
+      <button type="button" class="iconbtn" data-act="cal-month" data-dir="1" aria-label="Mois suivant">${ICON.next}</button>
+    </div>
+    <div class="cal-grid" role="grid">
+      ${WEEKDAYS.map((w) => `<span class="cal-wd" aria-hidden="true">${w}</span>`).join("")}
+      ${cells.join("")}
+    </div>`;
+}
+
+let calMonth = null;
+function openCalendar() {
+  const d = parseKey(ui.date);
+  calMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+  const hasGoal = !!store.getState().goals.kcal;
+  openSheet(`
+    <div id="cal">${calendarGrid(calMonth)}</div>
+    <div class="cal-legend small muted">
+      ${hasGoal ? `<span><i class="dot st-ok"></i>Dans l'objectif</span><span><i class="dot st-over"></i>Objectif dépassé</span>`
+        : `<span><i class="dot st-logged"></i>Jour renseigné</span>`}
+    </div>
+    <button type="button" class="btn-outline" data-act="cal-today">Aujourd'hui</button>`, () => {});
+}
+
+function calMonthStep(step) {
+  calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + Number(step), 1);
+  $("#cal", sheet).innerHTML = calendarGrid(calMonth);
+}
+
+function calPick(key) {
+  ui.date = key;
+  sheet.close();
+  render();
 }
 
 // ======================================================================
@@ -1076,6 +1147,10 @@ const actions = {
   "prev-day": () => { ui.date = addDays(ui.date, -1); render(); },
   "next-day": () => { ui.date = addDays(ui.date, 1); render(); },
   today: () => { if (ui.date !== todayKey()) { ui.date = todayKey(); render(); } },
+  calendar: openCalendar,
+  "cal-month": (d) => calMonthStep(d.dir),
+  "cal-pick": (d) => calPick(d.day),
+  "cal-today": () => calPick(todayKey()),
   settings: () => go("settings"),
   "back-day": () => go("day"),
   "new-meal": newMeal,
