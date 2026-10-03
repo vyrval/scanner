@@ -8,7 +8,7 @@ const CACHE = "carnet-v1";
 const SHELL = [
   "./", "index.html", "manifest.webmanifest", "css/style.css",
   "js/app.js", "js/store.js", "js/off.js", "js/scanner.js", "js/util.js",
-  "js/activities.js", "js/quality.js",
+  "js/activities.js", "js/quality.js", "js/version.js",
   "icons/icon.svg", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png",
 ];
 const RUNTIME_HOSTS = ["fonts.googleapis.com", "fonts.gstatic.com", "cdn.jsdelivr.net"];

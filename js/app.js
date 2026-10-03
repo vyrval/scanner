@@ -3,6 +3,7 @@ import * as off from "./off.js";
 import { startScanner, stopScanner } from "./scanner.js";
 import { ACTIVITY_GROUPS, OTHER, activityInfo, activityKcal } from "./activities.js";
 import { NOVA } from "./quality.js";
+import { VERSION } from "./version.js";
 import {
   NUTRIENTS, esc, num, fmt, uid, scale, entryTotals, mealTotals, dayTotals,
   burnedKcal, sortMeals, todayKey, addDays, parseKey, nowTime, suggestMealName,
@@ -862,7 +863,7 @@ function renderSettings() {
       <input type="file" id="importFile" accept="application/json,.json" hidden>
       <button class="textbtn danger" data-act="wipe">Tout effacer…</button>
     </section>
-    <p class="muted small center">Données produits : <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a>, licence ODbL</p>`;
+    <p class="muted small center">Données produits : <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a>, licence ODbL<br><span class="num">Version ${VERSION}</span></p>`;
   store.requestPersist().then((ok) => {
     const el = $("#persist");
     if (!el) return;
@@ -1093,7 +1094,7 @@ document.addEventListener("visibilitychange", () => {
 // ======================================================================
 // Installation (PWA)
 // ======================================================================
-let installPrompt = null; // évènement beforeinstallprompt (Chrome, Edge, Samsung…)
+let installPrompt = window.__installPrompt ?? null; // beforeinstallprompt (Chrome, Edge, Samsung…)
 const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const isIOSSafari = () => isIOS() && !/crios|fxios|edgios/i.test(navigator.userAgent);
@@ -1102,14 +1103,15 @@ function installState() {
   if (isStandalone()) return "installed";
   if (installPrompt) return "prompt";
   if (isIOS()) return "ios";
-  return "unavailable";
+  return "manual"; // pas de proposition du navigateur : on explique le menu
+
 }
 
 const bannerDismissed = () => { try { return localStorage.getItem("carnet:installBanner") === "off"; } catch { return false; } };
 
 function installBanner() {
   const st = installState();
-  if ((st !== "prompt" && st !== "ios") || bannerDismissed()) return "";
+  if (st === "installed" || bannerDismissed()) return "";
   return `
     <section class="install-banner">
       <img src="icons/icon-192.png" alt="" width="40" height="40">
@@ -1127,7 +1129,8 @@ function installCardInner() {
       <button class="cta" data-act="install">Installer l'application</button>`,
     ios: `<p>Ajoute Carnet à ton écran d'accueil : icône, plein écran, ouverture même hors ligne, et tes données sont protégées de l'effacement automatique de Safari.</p>
       <button class="cta" data-act="install">Installer sur l'iPhone</button>`,
-    unavailable: `<p class="muted small">Ton navigateur ne propose pas l'installation ici. Ouvre ce site dans Chrome (Android) ou Safari (iPhone), ou cherche « Installer l'application » / « Ajouter à l'écran d'accueil » dans le menu du navigateur.</p>`,
+    manual: `<p>Ajoute Carnet à ton écran d'accueil : icône, plein écran, ouverture même hors ligne.</p>
+      <button class="cta" data-act="install">Installer l'application</button>`,
   }[st];
   return `${ruleHead("Application")}${body}`;
 }
@@ -1152,20 +1155,34 @@ function iosInstallSheet() {
     <button value="ok" class="cta">J'ai compris</button>`, () => {});
 }
 
+function manualInstallSheet() {
+  const dots = `<svg viewBox="0 0 24 24" aria-hidden="true" class="inline-ic"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>`;
+  openSheet(`
+    <h2 class="sheet-title">Installer l'application</h2>
+    <ol class="steps">
+      <li>Ouvre le menu du navigateur ${dots} (en haut à droite dans Chrome).</li>
+      <li>Choisis <strong>Installer l'application</strong> ou <strong>Ajouter à l'écran d'accueil</strong>.</li>
+      <li>Confirme. Carnet apparaît avec son icône.</li>
+    </ol>
+    <p class="muted small">Si l'option n'apparaît pas, l'appli est peut-être déjà installée : cherche l'icône Carnet sur ton écran d'accueil. Sur Firefox, l'option s'appelle « Installer » ou « Ajouter à l'écran d'accueil ».</p>
+    <button value="ok" class="cta">J'ai compris</button>`, () => {});
+}
+
 async function install() {
   const st = installState();
   if (st === "ios") return iosInstallSheet();
+  if (st === "manual") return manualInstallSheet();
   if (st !== "prompt") return;
   installPrompt.prompt();
   const { outcome } = await installPrompt.userChoice;
-  installPrompt = null;
+  installPrompt = window.__installPrompt = null;
   if (outcome !== "accepted") toast("Installation annulée");
   refreshInstallUI();
 }
 
 window.addEventListener("beforeinstallprompt", (e) => {
   e.preventDefault(); // on garde la proposition pour notre bouton
-  installPrompt = e;
+  installPrompt = window.__installPrompt = e;
   refreshInstallUI();
 });
 window.addEventListener("appinstalled", () => {
