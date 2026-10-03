@@ -918,6 +918,55 @@ function openSheet(html, onSubmit) {
 }
 
 sheet.addEventListener("click", (e) => { if (e.target === sheet) sheet.close(); });
+
+// Glisser vers le bas pour fermer : depuis la poignée, ou n'importe où
+// quand la feuille est déjà en haut de son défilement.
+(() => {
+  let startY = 0, lastY = 0, lastT = 0, speed = 0, dragging = false, armed = false;
+  const reset = () => { sheet.style.transition = ""; sheet.style.transform = ""; };
+
+  sheet.addEventListener("touchstart", (e) => {
+    if (e.touches.length !== 1 || e.target.closest("input, select, textarea")) { armed = false; return; }
+    armed = sheet.scrollTop <= 0 || !!e.target.closest(".sheet-top");
+    dragging = false;
+    startY = lastY = e.touches[0].clientY;
+    lastT = e.timeStamp;
+    speed = 0;
+  }, { passive: true });
+
+  sheet.addEventListener("touchmove", (e) => {
+    if (!armed) return;
+    const y = e.touches[0].clientY;
+    const dy = y - startY;
+    if (!dragging) {
+      if (dy < 6) { if (dy < -6) armed = false; return; } // vers le haut : défilement normal
+      dragging = true;
+      sheet.style.transition = "none";
+    }
+    e.preventDefault();
+    speed = (y - lastY) / Math.max(1, e.timeStamp - lastT);
+    lastY = y;
+    lastT = e.timeStamp;
+    sheet.style.transform = `translateY(${Math.max(0, dy)}px)`;
+  }, { passive: false });
+
+  const end = () => {
+    if (!dragging) return;
+    dragging = armed = false;
+    const dy = lastY - startY;
+    sheet.style.transition = "transform .2s ease-out";
+    if (dy > 110 || (dy > 30 && speed > 0.6)) {
+      sheet.style.transform = "translateY(100%)";
+      setTimeout(() => { sheet.close(); reset(); }, 190);
+    } else {
+      sheet.style.transform = "translateY(0)";
+      setTimeout(reset, 210);
+    }
+  };
+  sheet.addEventListener("touchend", end);
+  sheet.addEventListener("touchcancel", end);
+  sheet.addEventListener("close", reset);
+})();
 sheet.addEventListener("input", () => sheet.onPreview?.());
 
 let toastTimer;
