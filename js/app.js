@@ -222,8 +222,7 @@ function renderDay() {
       <div class="tl-rail"><span class="num">${m.time}</span><i></i></div>
       <div class="card">
         ${ruleHead(esc(m.name), `<span class="rule-right"><span class="num">${fmt(mealTotals(m).kcal)} kcal</span>
-          <button class="more" data-act="edit-meal" data-meal="${m.id}" aria-label="Modifier ou supprimer ${esc(m.name)}">${ICON.more}</button></span>`,
-          `data-act="edit-meal" data-meal="${m.id}" aria-label="Modifier le repas ${esc(m.name)}"`)}
+          <button class="more" data-act="edit-meal" data-meal="${m.id}" aria-label="Renommer ou supprimer ${esc(m.name)}">${ICON.more}</button></span>`)}
         ${m.entries.length ? m.entries.map((e) => `
           <button class="line" data-act="edit-entry" data-meal="${m.id}" data-entry="${e.id}">
             <span class="line-main"><span>${esc(e.name)}</span><small class="num">${fmt(e.qty)} g</small></span>
@@ -582,31 +581,14 @@ function toggleSave(id) {
 // ======================================================================
 // Repas, entrées, activités
 // ======================================================================
+// Pas de formulaire : on va direct à l'ajout d'aliments. Le repas (nom
+// suggéré selon l'heure) n'est créé qu'au premier aliment ajouté, donc
+// pas de repas vide si on revient en arrière. Renommer : bouton ⋯.
 function newMeal() {
-  const time = defaultTime();
-  let suggested = suggestMealName(time);
-  openSheet(`
-    <h2 class="sheet-title">Nouveau repas</h2>
-    <label class="flabel">Nom<input name="name" id="f-name" required maxlength="40" value="${esc(suggested)}"></label>
-    <label class="flabel">Heure<input name="time" id="f-time" type="time" required value="${time}"></label>
-    <div class="sheet-actions">
-      <button value="cancel" class="btn-outline" formnovalidate>Annuler</button>
-      <button value="ok" class="cta">Créer et ajouter</button>
-    </div>`, (_, fd) => {
-    const id = uid();
-    store.update((s) => {
-      store.ensureDay(s, ui.date).meals.push({ id, name: fd.get("name").trim(), time: fd.get("time"), entries: [] });
-    });
-    ui.mealId = id;
-    ui.results = null;
-    ui.query = "";
-    go("add");
-  });
-  // Tant que le nom n'a pas été retouché, il suit l'heure.
-  $("#f-time", sheet).addEventListener("input", (e) => {
-    const nameEl = $("#f-name", sheet);
-    if (nameEl.value === suggested) nameEl.value = suggested = suggestMealName(e.target.value);
-  });
+  ui.mealId = null;
+  ui.results = null;
+  ui.query = "";
+  go("add");
 }
 
 function deleteMeal(mealId) {
