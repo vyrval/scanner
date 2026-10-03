@@ -469,10 +469,10 @@ function qualityBlock(p) {
         ${q.additives.length ? `<div class="chips tight">${q.additives.map((a) => `<span class="tag">${esc(a)}</span>`).join("")}</div>` : `<span class="small">Aucun additif indiqué</span>`}</div>
       <div class="qline"><span class="eyebrow">Allergènes</span>
         <span class="small">${q.allergens.length ? q.allergens.map(esc).join(", ") : "Aucun allergène indiqué"}</span></div>
-      <details class="ingr"${q.ingredients ? "" : " open"}><summary>Ingrédients</summary>
+      <div class="qline ingr"><span class="eyebrow">Ingrédients</span>
         ${q.ingredients ? `<p class="small">${esc(q.ingredients)}</p>`
-          : `<p class="small">Liste non renseignée sur Open Food Facts${p.code ? ` · <a href="https://world.openfoodfacts.org/product/${esc(p.code)}" target="_blank" rel="noopener">voir la fiche</a>` : ""}.</p>`}
-      </details>
+          : `<p class="small muted">Liste non renseignée sur Open Food Facts${p.code ? ` · <a href="https://world.openfoodfacts.org/product/${esc(p.code)}" target="_blank" rel="noopener">voir la fiche</a>` : ""}.</p>`}
+      </div>
     </section>`;
 }
 

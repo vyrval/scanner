@@ -287,7 +287,12 @@ dialog#sheet::backdrop { background: var(--scrim); }
 .phead { display: flex; align-items: flex-start; gap: 14px; }
 .phead-text { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .phead-text h2 { font-size: 26px; line-height: 1.05; text-wrap: balance; }
-.ns { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #FFFFFF; padding: 3px 8px; border-radius: 99px; }
+.ns, .nova {
+  display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 12px;
+  font-family: var(--sans); font-size: 11px; line-height: 1; font-weight: 800; letter-spacing: .05em;
+  text-transform: uppercase; color: #FFFFFF; white-space: nowrap;
+}
+#novaHead { display: contents; }
 .ns-a { background: #038141; } .ns-b { background: #5E9C1F; } .ns-c { background: #B88600; }
 .ns-d { background: #D46A00; } .ns-e { background: #D63A0E; }
 
@@ -391,7 +396,6 @@ body.no-tabbar #toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); }
 :root { --n1: #1E7B34; --n2: #8A6A00; --n3: #C25A00; --n4: #C0262D; --tag-bg: var(--soft); }
 @media (prefers-color-scheme: dark) { :root { --n1: #4CC36A; --n2: #E6C34A; --n3: #FF9A4D; --n4: #FF6B6B; } }
 .chips.tight { gap: 6px; }
-.nova { font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 3px 8px; border-radius: 99px; color: #FFFFFF; }
 .nova-1 { background: #1E7B34; } .nova-2 { background: #8A6A00; } .nova-3 { background: #C25A00; } .nova-4 { background: #C0262D; }
 .quality { display: flex; flex-direction: column; gap: 14px; }
 .nova-row { display: flex; align-items: center; gap: 14px; }
@@ -409,8 +413,7 @@ body.no-tabbar #toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); }
 .tag { font-family: var(--mono); font-size: 12px; font-weight: 600; padding: 4px 8px; border-radius: 8px; background: var(--tag-bg); color: var(--ink); }
 .tag.good { font-family: var(--sans); background: var(--accent-soft); color: var(--accent-ink); }
 .tag.bad { font-family: var(--sans); background: color-mix(in srgb, var(--n4) 14%, var(--surface)); color: var(--n4); }
-.ingr summary { cursor: pointer; font-size: 14px; font-weight: 700; min-height: 32px; display: flex; align-items: center; }
-.ingr p { margin-top: 6px; line-height: 1.5; color: var(--muted); }
+.ingr p { margin: 0; line-height: 1.5; }
 .status .retry { font-weight: 800; min-height: 32px; text-decoration: underline; }
 
 /* ---------- Bouton fermer des feuilles ---------- */
