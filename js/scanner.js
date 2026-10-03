@@ -132,13 +132,15 @@ export async function startScanner(video, onCode) {
       session.stream = await openCamera(video, 1920, 1080);
       if (session.stopped) { stopScanner(); return null; }
       const det = new BarcodeDetector({ formats: FORMATS });
+      // La boucle continue après une lecture : il en faut deux identiques
+      // (double lecture) avant que found() n'arrête la caméra.
       const tick = async () => {
         if (session.stopped) return;
         try {
           const codes = await det.detect(video);
-          if (codes.length) return found(codes[0].rawValue);
+          for (const c of codes) found(c.rawValue);
         } catch {}
-        requestAnimationFrame(tick);
+        if (!session.stopped) requestAnimationFrame(tick);
       };
       tick();
       return makeControls(session.stream.getVideoTracks()[0]);
