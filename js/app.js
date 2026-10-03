@@ -254,6 +254,7 @@ function renderDay() {
       <button class="iconbtn" data-act="next-day" aria-label="Jour suivant">${ICON.next}</button>
       <button class="iconbtn bare" data-act="settings" aria-label="Réglages">${ICON.sliders}</button>
     </header>
+    ${installBanner()}
     ${budgetCard}
     <div class="section-head">
       <span class="eyebrow">Repas</span>
@@ -846,6 +847,7 @@ function renderSettings() {
       <p class="muted small note">Laisse un champ vide pour ne pas suivre ce nutriment. Les calories du sport s'ajoutent au budget du jour.</p>
       <button class="cta">Enregistrer les objectifs</button>
     </form>
+    <section class="card stack-12" id="installCard">${installCardInner()}</section>
     <section class="card stack-12">
       ${ruleHead("Sauvegarde")}
       <p>Tout est stocké sur ce téléphone, rien n'est envoyé ailleurs.</p>
@@ -1027,6 +1029,8 @@ const actions = {
   "new-product": newProduct,
   export: exportBackup,
   wipe: confirmWipe,
+  install,
+  "dismiss-install": () => { try { localStorage.setItem("carnet:installBanner", "off"); } catch {} render(); },
 };
 
 document.addEventListener("click", (e) => {
@@ -1085,6 +1089,94 @@ document.addEventListener("visibilitychange", () => {
     if (ui.view === "day") render();
   }
 });
+
+// ======================================================================
+// Installation (PWA)
+// ======================================================================
+let installPrompt = null; // évènement beforeinstallprompt (Chrome, Edge, Samsung…)
+const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const isIOSSafari = () => isIOS() && !/crios|fxios|edgios/i.test(navigator.userAgent);
+
+function installState() {
+  if (isStandalone()) return "installed";
+  if (installPrompt) return "prompt";
+  if (isIOS()) return "ios";
+  return "unavailable";
+}
+
+const bannerDismissed = () => { try { return localStorage.getItem("carnet:installBanner") === "off"; } catch { return false; } };
+
+function installBanner() {
+  const st = installState();
+  if ((st !== "prompt" && st !== "ios") || bannerDismissed()) return "";
+  return `
+    <section class="install-banner">
+      <img src="icons/icon-192.png" alt="" width="40" height="40">
+      <div class="stack-2 grow"><strong>Installer Carnet</strong><span class="small muted">Sur ton écran d'accueil, comme une vraie appli, même hors ligne.</span></div>
+      <button class="btn-ink small-btn" data-act="install">Installer</button>
+      <button class="iconbtn bare" data-act="dismiss-install" aria-label="Masquer">${ICON.close}</button>
+    </section>`;
+}
+
+function installCardInner() {
+  const st = installState();
+  const body = {
+    installed: `<p class="hstack"><span class="pill ok"><i></i>Installée sur cet appareil</span></p>`,
+    prompt: `<p>Ajoute Carnet à ton écran d'accueil : icône, plein écran, ouverture même hors ligne.</p>
+      <button class="cta" data-act="install">Installer l'application</button>`,
+    ios: `<p>Ajoute Carnet à ton écran d'accueil : icône, plein écran, ouverture même hors ligne, et tes données sont protégées de l'effacement automatique de Safari.</p>
+      <button class="cta" data-act="install">Installer sur l'iPhone</button>`,
+    unavailable: `<p class="muted small">Ton navigateur ne propose pas l'installation ici. Ouvre ce site dans Chrome (Android) ou Safari (iPhone), ou cherche « Installer l'application » / « Ajouter à l'écran d'accueil » dans le menu du navigateur.</p>`,
+  }[st];
+  return `${ruleHead("Application")}${body}`;
+}
+
+function refreshInstallUI() {
+  const card = $("#installCard");
+  if (card) card.innerHTML = installCardInner();
+  if (ui.view === "day") render();
+}
+
+function iosInstallSheet() {
+  const share = `<svg viewBox="0 0 24 24" aria-hidden="true" class="inline-ic"><path d="M12 3v12M8 7l4-4 4 4M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8"/></svg>`;
+  openSheet(`
+    <h2 class="sheet-title">Installer sur l'iPhone</h2>
+    ${isIOSSafari() ? "" : `<p class="small warn-note">Ouvre d'abord cette page dans <strong>Safari</strong> si l'option n'apparaît pas dans ce navigateur.</p>`}
+    <ol class="steps">
+      <li>Touche le bouton <strong>Partager</strong> ${share} en bas de Safari (ou en haut sur iPad).</li>
+      <li>Fais défiler et choisis <strong>Sur l'écran d'accueil</strong>.</li>
+      <li>Touche <strong>Ajouter</strong>. Carnet apparaît avec son icône.</li>
+    </ol>
+    <p class="muted small">Ouvre ensuite Carnet depuis l'icône : tes données restent sur ce téléphone.</p>
+    <button value="ok" class="cta">J'ai compris</button>`, () => {});
+}
+
+async function install() {
+  const st = installState();
+  if (st === "ios") return iosInstallSheet();
+  if (st !== "prompt") return;
+  installPrompt.prompt();
+  const { outcome } = await installPrompt.userChoice;
+  installPrompt = null;
+  if (outcome !== "accepted") toast("Installation annulée");
+  refreshInstallUI();
+}
+
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault(); // on garde la proposition pour notre bouton
+  installPrompt = e;
+  refreshInstallUI();
+});
+window.addEventListener("appinstalled", () => {
+  installPrompt = null;
+  toast("Carnet est installé");
+  refreshInstallUI();
+});
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch((e) => console.warn("Service worker non enregistré", e));
+}
 
 store.requestPersist();
 render();

@@ -424,3 +424,17 @@ body.no-tabbar #toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); }
 .close svg { width: 20px; height: 20px; stroke-width: 2.2; }
 .sheet-top { touch-action: none; cursor: grab; }
 @media (prefers-reduced-motion: reduce) { dialog#sheet { transition: none !important; } }
+
+/* ---------- Installation ---------- */
+.install-banner {
+  display: flex; align-items: center; gap: 12px; padding: 12px 8px 12px 12px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
+}
+.install-banner img { border-radius: 10px; flex-shrink: 0; }
+.install-banner strong { font-size: 15px; }
+.small-btn { min-height: 40px; padding: 0 14px; flex-shrink: 0; }
+.install-banner .iconbtn { width: 36px; height: 36px; margin-left: -4px; }
+.install-banner .iconbtn svg { width: 18px; height: 18px; }
+.steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 12px; line-height: 1.45; }
+.inline-ic { width: 18px; height: 18px; vertical-align: -3px; color: var(--accent); }
+.warn-note { padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--warn) 12%, var(--surface)); }
