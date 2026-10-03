@@ -43,6 +43,7 @@ const ICON = {
   plus: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>`,
   minus: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>`,
   close: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`,
+  torch: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h8l-1 5H9zM9 8h6l-1 6v7h-4v-7z"/><path d="M12 14v2"/></svg>`,
   more: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg>`,
   trash: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>`,
 };
@@ -290,6 +291,11 @@ function renderAdd() {
       ${GHOST_CODE}
       <span class="corner c-tl"></span><span class="corner c-tr"></span><span class="corner c-bl"></span><span class="corner c-br"></span>
       <span class="scanline" id="scanline" hidden></span>
+      <div class="vf-tools" id="vfTools" hidden>
+        <button type="button" class="vf-btn" id="zoomBtn" data-act="cam-zoom" hidden aria-label="Zoom">2×</button>
+        <button type="button" class="vf-btn" id="torchBtn" data-act="cam-torch" hidden aria-label="Lampe" aria-pressed="false">${ICON.torch}</button>
+      </div>
+      <span class="focus-ring" id="focusRing" hidden></span>
       <div class="vf-bar">
         <span class="vf-hint" id="vfHint">Scanne le code-barres d'un produit</span>
         <button class="pill-light" data-act="scan" id="scanBtn">Scanner</button>
@@ -410,20 +416,74 @@ function scanUI(on) {
   $("#scanline").hidden = !on;
   $("#scanBtn").hidden = on;
   $("#stopBtn").hidden = !on;
-  $("#vfHint").textContent = on ? "Vise le code-barres" : "Scanne le code-barres d'un produit";
+  $("#vfHint").textContent = on ? "À 15–20 cm · touche l'image pour la mise au point" : "Scanne le code-barres d'un produit";
+  if (!on) { cam = null; $("#vfTools").hidden = true; $("#focusRing").hidden = true; }
+}
+
+// Réglages caméra (selon le téléphone) : zoom, lampe, toucher pour la mise au point.
+let cam = null;
+function setupCameraTools(controls) {
+  cam = controls;
+  const tools = $("#vfTools");
+  if (!tools || !cam) return;
+  const zoomBtn = $("#zoomBtn"), torchBtn = $("#torchBtn");
+  zoomBtn.hidden = !cam.zoom || cam.zoom.max < 1.5;
+  torchBtn.hidden = !cam.torch;
+  tools.hidden = zoomBtn.hidden && torchBtn.hidden;
+  // Un léger zoom par défaut : on tient le téléphone plus loin, là où il fait la mise au point.
+  if (!zoomBtn.hidden) {
+    const z = Math.min(2, cam.zoom.max);
+    cam.setZoom(z);
+    zoomBtn.textContent = "1×";
+    zoomBtn.dataset.zoom = String(z);
+    zoomBtn.setAttribute("aria-label", "Revenir au zoom 1×");
+  }
+}
+
+function toggleZoom() {
+  if (!cam?.zoom) return;
+  const btn = $("#zoomBtn");
+  const zoomed = btn.textContent === "1×"; // le bouton affiche l'action suivante
+  const z = zoomed ? Math.max(1, cam.zoom.min) : Math.min(2, cam.zoom.max);
+  cam.setZoom(z);
+  btn.textContent = zoomed ? "2×" : "1×";
+  btn.setAttribute("aria-label", zoomed ? "Zoomer 2×" : "Revenir au zoom 1×");
+}
+
+function toggleTorch() {
+  if (!cam?.torch) return;
+  const btn = $("#torchBtn");
+  const on = btn.getAttribute("aria-pressed") !== "true";
+  cam.setTorch(on);
+  btn.setAttribute("aria-pressed", String(on));
+}
+
+function focusTap(e) {
+  if (!cam || e.target.closest("button")) return;
+  const vf = $("#vf");
+  const r = vf.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+  const ring = $("#focusRing");
+  ring.style.left = `${e.clientX - r.left}px`;
+  ring.style.top = `${e.clientY - r.top}px`;
+  ring.hidden = false;
+  ring.classList.remove("pulse"); void ring.offsetWidth; ring.classList.add("pulse");
+  if (cam.canFocus) cam.focusAt(x, y);
+  setTimeout(() => { ring.hidden = true; }, 900);
 }
 
 async function scan() {
   scanUI(true);
   setStatus("");
   try {
-    await startScanner($("#video"), (code) => {
+    const controls = await startScanner($("#video"), (code) => {
       scanUI(false);
       navigator.vibrate?.(60);
       $("#q").value = code;
       ui.query = code;
       lookupCode(code);
     });
+    if (controls) setupCameraTools(controls);
   } catch (e) {
     scanUI(false);
     setStatus(e.message, true);
@@ -1026,6 +1086,8 @@ const actions = {
   "edit-activity": (d) => editActivity(d.id),
   scan,
   "stop-scan": () => { stopScan(); setStatus(""); },
+  "cam-zoom": toggleZoom,
+  "cam-torch": toggleTorch,
   "open-product": (d) => (ui.view === "add" && ui.results ? openFromSearch(d.id) : openProduct(d.id)),
   "quick-add": (d) => quickAdd(d.id),
   "toggle-save": (d) => toggleSave(d.id),
@@ -1038,6 +1100,7 @@ const actions = {
 };
 
 document.addEventListener("click", (e) => {
+  if (e.target.closest("#vf.live")) focusTap(e);
   const b = e.target.closest("[data-nav],[data-act],[data-set-qty],[data-step]");
   if (!b) return;
   if (b.dataset.nav) {

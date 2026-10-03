@@ -441,3 +441,21 @@ body.no-tabbar #toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); }
 .steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 12px; line-height: 1.45; }
 .inline-ic { width: 18px; height: 18px; vertical-align: -3px; color: var(--accent); }
 .warn-note { padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--warn) 12%, var(--surface)); }
+
+/* ---------- Réglages caméra ---------- */
+.vf-tools { position: absolute; top: 12px; right: 12px; display: flex; gap: 8px; z-index: 2; }
+.vf-btn {
+  min-width: 44px; height: 44px; padding: 0 12px; border: 0; border-radius: 22px;
+  background: rgb(0 0 0 / .5); color: #FFFFFF; font-family: var(--mono); font-size: 14px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px);
+}
+.vf-btn svg { width: 20px; height: 20px; }
+.vf-btn[aria-pressed="true"] { background: #FFFFFF; color: #16181A; }
+.focus-ring {
+  position: absolute; width: 64px; height: 64px; margin: -32px 0 0 -32px; z-index: 1;
+  border: 2px solid #FFD54A; border-radius: 12px; pointer-events: none;
+}
+.focus-ring.pulse { animation: focuspulse .5s ease-out; }
+@keyframes focuspulse { from { transform: scale(1.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.viewfinder.live { cursor: crosshair; }
+.vf-hint { font-size: 12px; }

@@ -42,6 +42,68 @@ function upcEtoA(e) {
   return `${ns}${body}${chk}`;
 }
 
+// Caméra arrière en bonne définition : plus de détails = lecture possible
+// d'un peu plus loin, là où l'autofocus fonctionne mieux.
+function constraints(width, height) {
+  return {
+    audio: false,
+    video: {
+      facingMode: { ideal: "environment" },
+      width: { ideal: width }, height: { ideal: height },
+      advanced: [{ focusMode: "continuous" }],
+    },
+  };
+}
+
+// Réglages caméra disponibles selon le téléphone (surtout Chrome Android ;
+// Safari n'en expose presque aucun).
+function makeControls(track) {
+  const caps = track?.getCapabilities?.() ?? {};
+  const settings = () => track?.getSettings?.() ?? {};
+  const apply = (c) => track.applyConstraints({ advanced: [c] }).catch(() => {});
+  const focusModes = caps.focusMode ?? [];
+  if (focusModes.includes("continuous")) apply({ focusMode: "continuous" });
+
+  return {
+    torch: !!caps.torch,
+    zoom: caps.zoom && caps.zoom.max > caps.zoom.min ? { min: caps.zoom.min, max: caps.zoom.max } : null,
+    canFocus: focusModes.includes("single-shot") || focusModes.includes("continuous") || !!caps.pointsOfInterest,
+    async setTorch(on) { await apply({ torch: !!on }); },
+    async setZoom(z) {
+      if (!this.zoom) return;
+      await apply({ zoom: Math.min(this.zoom.max, Math.max(this.zoom.min, z)) });
+    },
+    getZoom() { return settings().zoom ?? 1; },
+    // Toucher pour faire la mise au point (x, y entre 0 et 1), puis retour en continu.
+    async focusAt(x, y) {
+      const c = {};
+      if (caps.pointsOfInterest) c.pointsOfInterest = [{ x, y }];
+      if (focusModes.includes("single-shot")) c.focusMode = "single-shot";
+      else if (focusModes.includes("continuous")) c.focusMode = "continuous";
+      if (!Object.keys(c).length) return;
+      await apply(c);
+      if (c.focusMode === "single-shot" && focusModes.includes("continuous")) {
+        setTimeout(() => apply({ focusMode: "continuous" }), 1500);
+      }
+    },
+  };
+}
+
+async function openCamera(video, width, height) {
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia(constraints(width, height));
+  } catch (e) {
+    if (e?.name !== "OverconstrainedError") throw e;
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+  }
+  video.srcObject = stream;
+  video.setAttribute("playsinline", "");
+  await video.play();
+  return stream;
+}
+
+// Démarre la lecture. Renvoie les réglages caméra disponibles (lampe, zoom, mise au point).
 export async function startScanner(video, onCode) {
   stopScanner();
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -67,10 +129,8 @@ export async function startScanner(video, onCode) {
 
   try {
     if ("BarcodeDetector" in window) {
-      session.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-      if (session.stopped) return stopScanner();
-      video.srcObject = session.stream;
-      await video.play();
+      session.stream = await openCamera(video, 1920, 1080);
+      if (session.stopped) { stopScanner(); return null; }
       const det = new BarcodeDetector({ formats: FORMATS });
       const tick = async () => {
         if (session.stopped) return;
@@ -81,18 +141,25 @@ export async function startScanner(video, onCode) {
         requestAnimationFrame(tick);
       };
       tick();
-      return;
+      return makeControls(session.stream.getVideoTracks()[0]);
     }
 
-    await loadZXing();
-    if (session.stopped) return;
+    // ZXing (iPhone, Firefox) : 1280×720 garde un décodage rapide.
+    const [stream] = await Promise.all([openCamera(video, 1280, 720), loadZXing()]);
+    session.stream = stream;
+    if (session.stopped) { stopScanner(); return null; }
     const hints = new Map();
     const F = ZXing.BarcodeFormat;
     hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E]);
-    session.reader = new ZXing.BrowserMultiFormatReader(hints);
-    await session.reader.decodeFromConstraints({ video: { facingMode: "environment" } }, video, (res) => {
-      if (res) found(res.getText());
-    });
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    session.reader = new ZXing.BrowserMultiFormatReader(hints, 150);
+    const cb = (res) => { if (res) found(res.getText()); };
+    if (typeof session.reader.decodeFromStream === "function") {
+      session.reader.decodeFromStream(stream, video, cb);
+    } else {
+      session.reader.decodeFromVideoElementContinuously(video, cb);
+    }
+    return makeControls(stream.getVideoTracks()[0]);
   } catch (e) {
     stopScanner();
     throw cameraError(e);
