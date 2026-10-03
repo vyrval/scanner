@@ -411,3 +411,4 @@ body.no-tabbar #toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); }
 .tag.bad { font-family: var(--sans); background: color-mix(in srgb, var(--n4) 14%, var(--surface)); color: var(--n4); }
 .ingr summary { cursor: pointer; font-size: 14px; font-weight: 700; min-height: 32px; display: flex; align-items: center; }
 .ingr p { margin-top: 6px; line-height: 1.5; color: var(--muted); }
+.status .retry { font-weight: 800; min-height: 32px; text-decoration: underline; }

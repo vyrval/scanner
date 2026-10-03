@@ -80,12 +80,38 @@ async function getJSON(url, timeoutMs = 12000) {
   }
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Une coupure passagère (réseau mobile, serveur qui hoquette) : on retente une fois.
+async function getJSONRetry(url) {
+  try {
+    return await getJSON(url);
+  } catch (e) {
+    if (/Trop de requêtes/.test(e.message)) throw e;
+    await sleep(1200);
+    return getJSON(url);
+  }
+}
+
+// Le même produit peut être enregistré avec ou sans zéro initial
+// (UPC-A 12 chiffres <-> EAN-13 « 0… »).
+function codeVariants(code) {
+  const v = [code];
+  if (code.length === 12) v.push("0" + code);
+  if (code.length === 13 && code.startsWith("0")) v.push(code.slice(1));
+  return v;
+}
+
 // Fiche complète : valeurs nutritionnelles + transformation, additifs, etc.
 export async function getByCode(code) {
-  const data = await getJSON(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=${FIELDS}`);
-  if (data.status !== 1 || !data.product) return null;
-  const raw = { code, ...data.product };
-  return { ...normalize(raw), quality: extractQuality(raw) };
+  for (const c of codeVariants(code)) {
+    const data = await getJSONRetry(`https://world.openfoodfacts.org/api/v2/product/${c}.json?fields=${FIELDS}`);
+    if (data.status === 1 && data.product) {
+      const raw = { code: c, ...data.product };
+      return { ...normalize(raw), quality: extractQuality(raw) };
+    }
+  }
+  return null;
 }
 
 const clean = (list) => list.filter((p) => p.code && /^\d{6,14}$/.test(p.code)).map(normalize);

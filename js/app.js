@@ -349,11 +349,19 @@ function renderResults() {
         : "Tes derniers produits apparaîtront ici, avec un bouton pour les rajouter en un geste."}</p>`);
 }
 
-function setStatus(msg, err = false) {
+function setStatus(msg, err = false, retry = null) {
   const el = $("#status");
-  if (!el) return msg && toast(msg);
+  if (!el) return msg && toast(msg, retry);
   el.textContent = msg;
   el.classList.toggle("err", err);
+  if (retry) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "linkish accent retry";
+    b.textContent = retry.label;
+    b.addEventListener("click", retry.run, { once: true });
+    el.append(" ", b);
+  }
 }
 
 async function doSearch(q) {
@@ -374,17 +382,22 @@ async function doSearch(q) {
   }
 }
 
+let lookingUp = null;
 async function lookupCode(code) {
+  if (lookingUp === code) return; // même code déjà en cours
+  lookingUp = code;
   setStatus(`Recherche de ${code}…`);
   const local = store.getState().products[code];
   try {
     const p = await off.getByCode(code);
     if (p) { cache.set(p.id, p); setStatus(""); return openProduct(p.id); }
     if (local) { setStatus(""); return openProduct(code); }
-    setStatus(`Produit ${code} absent d'Open Food Facts. Tu peux le créer dans Produits.`, true);
+    setStatus(`Le code ${code} n'est pas dans Open Food Facts. Vérifie le code ou crée le produit dans Produits.`, true);
   } catch (e) {
     if (local) { setStatus(""); return openProduct(code); } // hors ligne : version stockée
-    setStatus("Erreur réseau : " + e.message, true);
+    setStatus(e.message, true, { label: "Réessayer", run: () => lookupCode(code) });
+  } finally {
+    lookingUp = null;
   }
 }
 
