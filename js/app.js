@@ -495,6 +495,8 @@ function scanUI(on) {
 let cam = null;
 function setupCameraTools(controls) {
   cam = controls;
+  const hint = $("#vfHint");
+  if (hint && controls?.engine) hint.textContent += ` · ${controls.engine}`;
   const tools = $("#vfTools");
   if (!tools || !cam) return;
   const zoomBtn = $("#zoomBtn"), torchBtn = $("#torchBtn");

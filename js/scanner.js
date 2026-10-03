@@ -104,15 +104,66 @@ async function openCamera(video, width, height) {
 }
 
 // Démarre la lecture. Renvoie les réglages caméra disponibles (lampe, zoom, mise au point).
+// Le détecteur natif existe sur certains Android sans savoir lire les EAN
+// (pas de Google Play services, navigateur dérivé…) : il ne détecte alors
+// jamais rien, sans erreur. On vérifie les formats qu'il annonce.
+async function nativeDetectorUsable() {
+  if (!("BarcodeDetector" in window)) return false;
+  try {
+    const formats = await BarcodeDetector.getSupportedFormats();
+    return formats.includes("ean_13");
+  } catch {
+    return false;
+  }
+}
+
+// Boucle ZXing : à chaque passage on recopie l'image courante dans un canvas à
+// la taille réelle de la vidéo (réduite à 1280 px de large), puis on décode.
+// (Le lecteur « Browser » de ZXing figeait la taille du canvas à la première
+// image : si la caméra changeait de définition ensuite — fréquent après
+// l'autofocus ou le zoom — il ne voyait plus qu'un coin de l'image.)
+function startZXingLoop(session, video, found, interval) {
+  const hints = new Map();
+  const F = ZXing.BarcodeFormat;
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E]);
+  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+  const reader = new ZXing.MultiFormatReader();
+  reader.setHints(hints);
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  let invert = false;
+  const loop = () => {
+    if (session.stopped) return;
+    const vw = video.videoWidth, vh = video.videoHeight;
+    if (video.readyState >= 2 && vw && vh) {
+      const scale = Math.min(1, 1280 / vw);
+      const w = Math.round(vw * scale), h = Math.round(vh * scale);
+      if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+      ctx.drawImage(video, 0, 0, w, h);
+      try {
+        // une image sur deux en couleurs inversées (codes clairs sur fond foncé)
+        const lum = new ZXing.HTMLCanvasElementLuminanceSource(canvas, invert);
+        found(reader.decode(new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum))).getText());
+      } catch {}
+      invert = !invert;
+    }
+    if (!session.stopped) session.timer = setTimeout(loop, interval);
+  };
+  loop();
+}
+
+// Démarre la lecture. Renvoie les réglages caméra disponibles (lampe, zoom,
+// mise au point) et le lecteur utilisé.
 export async function startScanner(video, onCode) {
   stopScanner();
   if (!navigator.mediaDevices?.getUserMedia) {
     throw new Error("Caméra indisponible : la page doit être servie en HTTPS.");
   }
-  const session = { stopped: false, stream: null, reader: null };
+  const session = { stopped: false, stream: null, timer: 0, backup: 0 };
   current = session;
   // Un code n'est accepté que s'il a une clé de contrôle valide et qu'il est
   // lu deux fois de suite : évite les lectures partielles (« produit absent »).
+  // Les deux lecteurs peuvent contribuer aux deux lectures.
   let last = null, hits = 0, lastAt = 0;
   const found = (raw) => {
     if (session.stopped) return;
@@ -128,40 +179,34 @@ export async function startScanner(video, onCode) {
   };
 
   try {
-    if ("BarcodeDetector" in window) {
+    const native = await nativeDetectorUsable();
+    if (native) {
       session.stream = await openCamera(video, 1920, 1080);
       if (session.stopped) { stopScanner(); return null; }
       const det = new BarcodeDetector({ formats: FORMATS });
-      // La boucle continue après une lecture : il en faut deux identiques
-      // (double lecture) avant que found() n'arrête la caméra.
+      // La boucle continue après une lecture : il en faut deux identiques.
       const tick = async () => {
         if (session.stopped) return;
         try {
-          const codes = await det.detect(video);
-          for (const c of codes) found(c.rawValue);
+          for (const c of await det.detect(video)) found(c.rawValue);
         } catch {}
         if (!session.stopped) requestAnimationFrame(tick);
       };
       tick();
-      return makeControls(session.stream.getVideoTracks()[0]);
+      // Filet de sécurité : si le natif n'a rien lu au bout de 2,5 s,
+      // ZXing tourne aussi en parallèle (plus lentement).
+      session.backup = setTimeout(() => {
+        loadZXing().then(() => { if (!session.stopped) startZXingLoop(session, video, found, 250); }).catch(() => {});
+      }, 2500);
+      return { ...makeControls(session.stream.getVideoTracks()[0]), engine: "natif" };
     }
 
-    // ZXing (iPhone, Firefox) : 1280×720 garde un décodage rapide.
+    // ZXing seul (iPhone, Firefox, Android sans détecteur EAN).
     const [stream] = await Promise.all([openCamera(video, 1280, 720), loadZXing()]);
     session.stream = stream;
     if (session.stopped) { stopScanner(); return null; }
-    const hints = new Map();
-    const F = ZXing.BarcodeFormat;
-    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E]);
-    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-    session.reader = new ZXing.BrowserMultiFormatReader(hints, 150);
-    const cb = (res) => { if (res) found(res.getText()); };
-    if (typeof session.reader.decodeFromStream === "function") {
-      session.reader.decodeFromStream(stream, video, cb);
-    } else {
-      session.reader.decodeFromVideoElementContinuously(video, cb);
-    }
-    return makeControls(stream.getVideoTracks()[0]);
+    startZXingLoop(session, video, found, 100);
+    return { ...makeControls(stream.getVideoTracks()[0]), engine: "ZXing" };
   } catch (e) {
     stopScanner();
     throw cameraError(e);
@@ -171,7 +216,8 @@ export async function startScanner(video, onCode) {
 export function stopScanner() {
   if (!current) return;
   current.stopped = true;
+  clearTimeout(current.timer);
+  clearTimeout(current.backup);
   current.stream?.getTracks().forEach((t) => t.stop());
-  try { current.reader?.reset(); } catch {}
   current = null;
 }
