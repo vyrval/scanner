@@ -105,7 +105,7 @@ function codeVariants(code) {
 // Fiche complète : valeurs nutritionnelles + transformation, additifs, etc.
 export async function getByCode(code) {
   for (const c of codeVariants(code)) {
-    const data = await getJSONRetry(`https://world.openfoodfacts.org/api/v2/product/${c}.json?fields=${FIELDS}`);
+    const data = await getJSONRetry(`https://world.openfoodfacts.org/api/v2/product/${c}.json?lc=fr&fields=${FIELDS}`);
     if (data.status === 1 && data.product) {
       const raw = { code: c, ...data.product };
       return { ...normalize(raw), quality: extractQuality(raw) };

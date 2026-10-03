@@ -2,7 +2,7 @@ import * as store from "./store.js";
 import * as off from "./off.js";
 import { startScanner, stopScanner } from "./scanner.js";
 import { ACTIVITY_GROUPS, OTHER, activityInfo, activityKcal } from "./activities.js";
-import { NOVA } from "./quality.js";
+import { NOVA, QUALITY_VERSION } from "./quality.js";
 import { VERSION } from "./version.js";
 import {
   NUTRIENTS, esc, num, fmt, uid, scale, entryTotals, mealTotals, dayTotals,
@@ -469,14 +469,17 @@ function qualityBlock(p) {
         ${q.additives.length ? `<div class="chips tight">${q.additives.map((a) => `<span class="tag">${esc(a)}</span>`).join("")}</div>` : `<span class="small">Aucun additif indiqué</span>`}</div>
       <div class="qline"><span class="eyebrow">Allergènes</span>
         <span class="small">${q.allergens.length ? q.allergens.map(esc).join(", ") : "Aucun allergène indiqué"}</span></div>
-      ${q.ingredients ? `<details class="ingr"><summary>Ingrédients</summary><p class="small">${esc(q.ingredients)}</p></details>` : ""}
+      <details class="ingr"${q.ingredients ? "" : " open"}><summary>Ingrédients</summary>
+        ${q.ingredients ? `<p class="small">${esc(q.ingredients)}</p>`
+          : `<p class="small">Liste non renseignée sur Open Food Facts${p.code ? ` · <a href="https://world.openfoodfacts.org/product/${esc(p.code)}" target="_blank" rel="noopener">voir la fiche</a>` : ""}.</p>`}
+      </details>
     </section>`;
 }
 
 // Produit enregistré avant cette version, ou trouvé par recherche : on complète en arrière-plan.
 async function ensureQuality(id) {
   const p = findProduct(id);
-  if (!p || p.manual || p.quality?.checked || !p.code) return;
+  if (!p || p.manual || p.quality?.v === QUALITY_VERSION || !p.code) return;
   try {
     const full = await off.getByCode(p.code);
     if (!full) throw new Error();
