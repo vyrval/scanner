@@ -412,3 +412,13 @@ body.no-tabbar #toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); }
 .ingr summary { cursor: pointer; font-size: 14px; font-weight: 700; min-height: 32px; display: flex; align-items: center; }
 .ingr p { margin-top: 6px; line-height: 1.5; color: var(--muted); }
 .status .retry { font-weight: 800; min-height: 32px; text-decoration: underline; }
+
+/* ---------- Bouton fermer des feuilles ---------- */
+.sheet-top { position: relative; display: flex; justify-content: center; align-items: center; min-height: 36px; margin: -4px 0 -10px; }
+.sheet-top .grab { margin: 0; }
+.close {
+  position: absolute; right: -6px; top: 50%; transform: translateY(-50%);
+  width: 40px; height: 40px; padding: 0; border: 0; border-radius: 20px;
+  background: var(--soft); color: var(--ink); display: flex; align-items: center; justify-content: center;
+}
+.close svg { width: 20px; height: 20px; stroke-width: 2.2; }

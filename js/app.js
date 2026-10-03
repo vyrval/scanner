@@ -41,6 +41,7 @@ const ICON = {
   search: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg>`,
   plus: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>`,
   minus: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>`,
+  close: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`,
   more: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg>`,
   trash: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>`,
 };
@@ -901,7 +902,9 @@ function confirmWipe() {
 // ======================================================================
 function openSheet(html, onSubmit) {
   sheet.onPreview = null;
-  sheet.innerHTML = `<form method="dialog" class="sheet-body"><span class="grab" aria-hidden="true"></span>${html}</form>`;
+  sheet.innerHTML = `<form method="dialog" class="sheet-body">
+    <div class="sheet-top"><span class="grab" aria-hidden="true"></span>
+      <button value="cancel" class="close" formnovalidate aria-label="Fermer">${ICON.close}</button></div>${html}</form>`;
   const form = $("form", sheet);
   form.addEventListener("submit", (e) => {
     const action = e.submitter?.value ?? "ok";
