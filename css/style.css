@@ -556,3 +556,8 @@ main:has(.compose-head) ~ #toast { bottom: calc(env(safe-area-inset-bottom, 0px)
   background: color-mix(in srgb, var(--on-accent) 22%, transparent); font-size: 14px; display: inline-flex; align-items: center; justify-content: center;
 }
 @media (prefers-color-scheme: dark) { #toast button { color: #12663B; } }
+
+/* Clavier ouvert sur la recherche : place pour faire remonter le champ, barre masquée */
+#searchForm { scroll-margin-top: calc(env(safe-area-inset-top, 0px) + 12px); }
+body.kb main { padding-bottom: 75vh; }
+body.kb .compose-bar { display: none; }

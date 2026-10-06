@@ -1413,6 +1413,26 @@ document.addEventListener("submit", (e) => {
   }
 });
 
+// Clavier ouvert sur la recherche : on fait remonter le champ en haut de
+// l'écran (sinon il reste caché sous le clavier) et on masque la barre
+// « Valider » qui flotterait au-dessus du clavier.
+function keepSearchVisible() {
+  const form = $("#searchForm");
+  if (form && document.activeElement?.id === "q") form.scrollIntoView({ block: "start", behavior: "smooth" });
+}
+document.addEventListener("focusin", (e) => {
+  if (e.target.id !== "q") return;
+  document.body.classList.add("kb");
+  keepSearchVisible();
+  setTimeout(keepSearchVisible, 350); // le clavier finit de s'ouvrir
+});
+document.addEventListener("focusout", (e) => {
+  if (e.target.id === "q") document.body.classList.remove("kb");
+});
+window.visualViewport?.addEventListener("resize", () => {
+  if (document.body.classList.contains("kb")) keepSearchVisible();
+});
+
 document.addEventListener("input", (e) => {
   if (e.target.id === "q" && !e.target.value) { ui.query = ""; ui.results = null; setStatus(""); renderResults(); }
   if (e.target.id === "pfilter") { ui.pfilter = e.target.value; renderPLists(); }
