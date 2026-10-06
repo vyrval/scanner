@@ -168,10 +168,20 @@ function go(v) {
   window.scrollTo(0, 0);
 }
 
+// La barre du bas (Valider / champ de recherche) change de hauteur : on mesure
+// sa vraie taille pour que la fin de la liste reste toujours accessible au-dessus.
+const barObserver = "ResizeObserver" in window ? new ResizeObserver(() => padForBar()) : null;
+function padForBar() {
+  const bar = $("#composeBar");
+  view.style.paddingBottom = bar ? `${Math.ceil(bar.getBoundingClientRect().height) + 20}px` : "";
+}
+
 function render() {
   document.body.classList.toggle("no-tabbar", ui.view === "settings" || ui.view === "add");
   document.querySelectorAll("[data-nav]").forEach((b) =>
     b.setAttribute("aria-current", b.dataset.nav === ui.view ? "page" : "false"));
+  barObserver?.disconnect();
+  view.style.paddingBottom = "";
   ({ day: renderDay, add: renderAdd, products: renderProducts, settings: renderSettings })[ui.view]();
 }
 
@@ -397,6 +407,8 @@ function renderAdd() {
     <div class="compose-bar" id="composeBar"></div>`;
   renderTray();
   renderModeBody();
+  barObserver?.observe($("#composeBar"));
+  padForBar();
 }
 
 function renderTray() {
