@@ -451,9 +451,9 @@ function renderTray() {
   renderBar();
 }
 
-// Barre du bas. En mode Chercher : le champ de recherche (collé au clavier)
-// et un bouton Valider compact. Le champ n'est jamais redessiné après coup
-// (sinon il perdrait le texte tapé et le clavier) : seul le bouton est mis à jour.
+// Barre du bas. En mode Chercher : le champ de recherche (collé au clavier) et
+// son bouton loupe ; on valide le repas avec la croix en haut ou depuis les
+// autres modes. Le champ n'est jamais redessiné (texte tapé et clavier conservés).
 function renderBar() {
   const bar = $("#composeBar");
   if (!bar) return;
@@ -466,16 +466,12 @@ function renderBar() {
     if (!$("#searchForm", bar)) {
       bar.innerHTML = `
         <form class="dock-row" id="searchForm" role="search">
-          <label class="field grow" for="q">${ICON.search}
+          <label class="field grow" for="q">
             <input id="q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Aliment, produit ou code-barres" aria-label="Rechercher un aliment ou un produit" value="${esc(ui.query)}">
           </label>
-          <button type="button" class="dock-done" id="dockDone" data-act="close-compose"></button>
+          <button type="submit" class="dock-go cta" aria-label="Lancer la recherche">${ICON.search}</button>
         </form>`;
     }
-    const done = $("#dockDone", bar);
-    done.className = n ? "dock-done cta" : "dock-done btn-outline";
-    done.setAttribute("aria-label", n ? label : "Terminer");
-    done.innerHTML = n ? `${ICON.check}<span class="num">${n}</span>` : "OK";
     fitDock();
     return;
   }
