@@ -759,13 +759,32 @@ function deleteMeal(mealId) {
   });
 }
 
+// Heure en 24 h quel que soit le téléphone : le champ natif type="time" suit
+// la langue du système et peut s'afficher en 12 h (AM/PM).
+function timeField(time) {
+  const [h, m] = time.split(":").map(Number);
+  const pad = (n) => String(n).padStart(2, "0");
+  const opts = (values, cur) => values.map((v) => `<option value="${pad(v)}"${v === cur ? " selected" : ""}>${pad(v)}</option>`).join("");
+  const mins = Array.from({ length: 12 }, (_, i) => i * 5);
+  if (!mins.includes(m)) mins.push(m), mins.sort((a, b) => a - b);
+  return `
+    <fieldset class="flabel">
+      <legend>Heure</legend>
+      <span class="timepick">
+        <span class="selectwrap"><select name="hour" id="f-hour" aria-label="Heures">${opts(Array.from({ length: 24 }, (_, i) => i), h)}</select>${ICON.down}</span>
+        <span class="num">:</span>
+        <span class="selectwrap"><select name="minute" id="f-minute" aria-label="Minutes">${opts(mins, m)}</select>${ICON.down}</span>
+      </span>
+    </fieldset>`;
+}
+
 function editMeal(mealId) {
   const meal = store.getDay(ui.date).meals.find((m) => m.id === mealId);
   if (!meal) return;
   openSheet(`
     <h2 class="sheet-title">Modifier le repas</h2>
     <label class="flabel">Nom<input name="name" id="f-name" required maxlength="40" value="${esc(meal.name)}"></label>
-    <label class="flabel">Heure<input name="time" id="f-time" type="time" required value="${meal.time}"></label>
+    ${timeField(meal.time)}
     <button value="ok" class="cta">Enregistrer</button>
     <button value="delete" class="btn-outline danger wide" formnovalidate>${ICON.trash}Supprimer le repas${meal.entries.length ? ` (${meal.entries.length} aliment${meal.entries.length > 1 ? "s" : ""})` : ""}</button>`,
   (action, fd) => {
@@ -773,7 +792,7 @@ function editMeal(mealId) {
     store.update((s) => {
       const m = store.ensureDay(s, ui.date).meals.find((x) => x.id === mealId);
       m.name = fd.get("name").trim();
-      m.time = fd.get("time");
+      m.time = `${fd.get("hour")}:${fd.get("minute")}`;
     });
   });
 }
