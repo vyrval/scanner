@@ -1,1 +1,3 @@
-export const VERSION = "2026-10-06 · 16h40";
+// Remplacé au déploiement par la GitHub Action (.github/workflows/pages.yml) :
+// hash du commit + date réelle, heure de Paris. « dev » = version locale.
+export const VERSION = "dev";
