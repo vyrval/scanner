@@ -593,6 +593,11 @@ function renderResults() {
   if (!el) return;
   if (ui.addMode !== "search") return renderRecents(el);
   {
+    const spinner = (label) => `<div class="loading" role="status"><span class="spinner" aria-hidden="true"></span>${label}</div>`;
+    if (!ui.results && ui.searching) {
+      el.innerHTML = spinner("Recherche…");
+      return;
+    }
     if (!ui.results) {
       el.innerHTML = `<p class="muted small empty">Tape un aliment ou un produit dans le champ en bas : aliments bruts (table Ciqual) et produits du commerce (Open Food Facts). Un code-barres tapé à la main marche aussi.</p>`;
       return;
@@ -600,7 +605,9 @@ function renderResults() {
     const raw = ui.results.filter((p) => p.generic);
     const packaged = ui.results.filter((p) => !p.generic);
     el.innerHTML = (raw.length ? `<span class="eyebrow">Aliments bruts · ${raw.length}</span>${productRows(raw, true)}` : "") +
-      (packaged.length || !raw.length ? `<span class="eyebrow">Produits du commerce · ${packaged.length}</span>${productRows(packaged, true)}` : "");
+      (ui.searching
+        ? `<span class="eyebrow">Produits du commerce</span>${spinner("Recherche dans Open Food Facts…")}`
+        : packaged.length || !raw.length ? `<span class="eyebrow">Produits du commerce · ${packaged.length}</span>${productRows(packaged, true)}` : "");
   }
 }
 
@@ -638,21 +645,25 @@ async function doSearch(q) {
   if (!q) { ui.results = null; setStatus(""); return renderResults(); }
   if (/^\d{8,14}$/.test(q)) return lookupCode(q);
   if (q.length < 2) return setStatus("Tape au moins 2 lettres.", true);
-  setStatus("Recherche…");
+  setStatus("");
+  // nouvelle recherche : on vide les anciens résultats et on affiche le chargement
+  ui.results = null;
+  ui.searching = true;
+  renderResults();
+  $("#results")?.scrollIntoView({ block: "start", behavior: "smooth" });
   // Aliments bruts (Ciqual, local) et produits du commerce (Open Food Facts) en parallèle :
   // les premiers s'affichent tout de suite, même si Open Food Facts est lent ou injoignable.
   const show = (list) => {
     if (ui.query !== q) return; // une autre recherche a été lancée entre-temps
     list.forEach((p) => cache.set(p.id, p));
-    const first = !ui.results;
     ui.results = list;
     renderResults();
-    if (first) $("#results")?.scrollIntoView({ block: "start", behavior: "smooth" });
   };
   const raw = ciqual.search(q).catch(() => []);
   raw.then((r) => { if (r.length) show(r); });
   const [generic, packaged] = await Promise.all([raw, off.search(q).then((r) => ({ r }), (e) => ({ e }))]);
   if (ui.query !== q) return;
+  ui.searching = false;
   show([...generic, ...(packaged.r ?? [])]);
   if (packaged.e) setStatus(generic.length ? "Produits du commerce indisponibles pour l'instant (Open Food Facts)." : packaged.e.message, !generic.length);
   else setStatus(ui.results.length ? "" : "Aucun résultat. Essaie un autre mot, ou crée le produit dans Produits.");
@@ -1463,7 +1474,7 @@ document.addEventListener("submit", (e) => {
 });
 
 document.addEventListener("input", (e) => {
-  if (e.target.id === "q" && !e.target.value) { ui.query = ""; ui.results = null; setStatus(""); renderResults(); }
+  if (e.target.id === "q" && !e.target.value) { ui.query = ""; ui.results = null; ui.searching = false; setStatus(""); renderResults(); }
   if (e.target.id === "pfilter") { ui.pfilter = e.target.value; renderPLists(); }
 });
 
