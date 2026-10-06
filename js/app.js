@@ -21,8 +21,7 @@ const ui = {
   query: "",
   results: null,     // résultats de recherche (null = listes récents/enregistrés)
   addTab: "recent",
-  addMode: (() => { try { const m = localStorage.getItem("carnet:addMode"); return m === "scan" ? "scan" : "recent"; } catch { return "recent"; } })(),
-  searchOpen: false, // écran de recherche plein écran par-dessus le compositeur
+  addMode: (() => { try { const m = localStorage.getItem("carnet:addMode"); return ["scan", "search"].includes(m) ? m : "recent"; } catch { return "recent"; } })(),
   pfilter: "",
   ptab: "saved",
 };
@@ -163,7 +162,6 @@ function nutritionLabel(p) {
 // Navigation
 // ======================================================================
 function go(v) {
-  if (ui.searchOpen) { ui.searchOpen = false; $("#searchLayer")?.remove(); document.body.classList.remove("searching"); }
   if (ui.view === "add" && v !== "add") stopScan();
   ui.view = v;
   render();
@@ -393,9 +391,7 @@ function renderAdd() {
     </header>
     <section class="card tray" id="tray" aria-live="polite"></section>
     <div class="modes" role="tablist" aria-label="Façon d'ajouter">
-      ${ADD_MODES.map(([k, label, icon]) => k === "search"
-        ? `<button class="mode" data-act="open-search">${ICON[icon]}<span>${label}</span></button>`
-        : `<button class="mode" data-act="add-mode" data-mode="${k}" aria-pressed="${ui.addMode === k}">${ICON[icon]}<span>${label}</span></button>`).join("")}
+      ${ADD_MODES.map(([k, label, icon]) => `<button class="mode" data-act="add-mode" data-mode="${k}" aria-pressed="${ui.addMode === k}">${ICON[icon]}<span>${label}</span></button>`).join("")}
     </div>
     <section id="modeBody" class="stack-10"></section>
     <div class="compose-bar" id="composeBar"></div>`;
@@ -440,12 +436,56 @@ function renderTray() {
       ${g.kcal ? `<span>Il te reste <span class="num ink">${fmt(left)} kcal</span> ${ui.date === todayKey() ? "aujourd'hui" : "ce jour-là"}</span>` : ""}
     </div>` : ""}`;
 
+  renderBar();
+}
+
+// Barre du bas. En mode Chercher : le champ de recherche (collé au clavier)
+// et un bouton Valider compact. Le champ n'est jamais redessiné après coup
+// (sinon il perdrait le texte tapé et le clavier) : seul le bouton est mis à jour.
+function renderBar() {
   const bar = $("#composeBar");
+  if (!bar) return;
+  const meal = currentMeal();
+  const name = meal?.name ?? suggestMealName(defaultTime());
   const n = meal?.entries.length ?? 0;
-  if (bar) bar.innerHTML = n
-    ? `<button class="cta wide-cta" data-act="close-compose" aria-label="Valider le repas, ${n} aliment${n > 1 ? "s" : ""}">${ICON.check}<span class="ellipsis">Valider ${esc(toMeal(name).replace(/^(au|à la|à l'|à) /, "le "))}</span><span class="count num">${n}</span></button>`
+  const label = `Valider le repas, ${n} aliment${n > 1 ? "s" : ""}`;
+  if (ui.addMode === "search") {
+    bar.classList.add("dock");
+    if (!$("#searchForm", bar)) {
+      bar.innerHTML = `
+        <form class="dock-row" id="searchForm" role="search">
+          <label class="field grow" for="q">${ICON.search}
+            <input id="q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Aliment, produit ou code-barres" aria-label="Rechercher un aliment ou un produit" value="${esc(ui.query)}">
+          </label>
+          <button type="button" class="dock-done" id="dockDone" data-act="close-compose"></button>
+        </form>`;
+    }
+    const done = $("#dockDone", bar);
+    done.className = n ? "dock-done cta" : "dock-done btn-outline";
+    done.setAttribute("aria-label", n ? label : "Terminer");
+    done.innerHTML = n ? `${ICON.check}<span class="num">${n}</span>` : "OK";
+    fitDock();
+    return;
+  }
+  bar.classList.remove("dock");
+  bar.innerHTML = n
+    ? `<button class="cta wide-cta" data-act="close-compose" aria-label="${label}">${ICON.check}<span class="ellipsis">Valider ${esc(toMeal(name).replace(/^(au|à la|à l'|à) /, "le "))}</span><span class="count num">${n}</span></button>`
     : `<button class="btn-outline wide-cta" data-act="close-compose">Terminer</button>`;
 }
+
+// iPhone : les éléments fixés en bas ne suivent pas le clavier, on recale la barre.
+function fitDock() {
+  const bar = $("#composeBar");
+  const vv = window.visualViewport;
+  if (!bar || !vv) return;
+  bar.style.bottom = `${Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop))}px`;
+}
+window.visualViewport?.addEventListener("resize", fitDock);
+window.visualViewport?.addEventListener("scroll", fitDock);
+
+// Clavier ouvert sur la recherche : la liste du repas se compacte un peu.
+document.addEventListener("focusin", (e) => { if (e.target.id === "q") document.body.classList.add("kb"); });
+document.addEventListener("focusout", (e) => { if (e.target.id === "q") document.body.classList.remove("kb"); });
 
 function renderModeBody() {
   const el = $("#modeBody");
@@ -475,65 +515,9 @@ function renderModeBody() {
     el.innerHTML = `<p class="status" id="status" role="status"></p><section id="results" class="stack-10"></section>`;
     renderResults();
   }
+  renderBar();
+  if (ui.addMode === "search" && !ui.results) setTimeout(() => $("#q")?.focus(), 50);
 }
-
-// ---------- Écran de recherche (plein écran, champ fixe en haut) ----------
-// Rien ne défile quand le clavier s'ouvre : seule la zone de résultats rétrécit.
-function openSearch() {
-  if (ui.searchOpen) return;
-  ui.searchOpen = true;
-  if (ui.addMode === "scan") stopScan();
-  const layer = document.createElement("div");
-  layer.id = "searchLayer";
-  layer.className = "search-layer";
-  layer.setAttribute("role", "dialog");
-  layer.setAttribute("aria-label", "Chercher un aliment");
-  layer.innerHTML = `
-    <form class="search-top" id="searchForm" role="search">
-      <button type="button" class="iconbtn bare" data-act="close-search" aria-label="Retour au repas">${ICON.prev}</button>
-      <label class="field grow" for="q">${ICON.search}
-        <input id="q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Aliment, produit ou code-barres" aria-label="Rechercher un aliment ou un produit" value="${esc(ui.query)}">
-      </label>
-    </form>
-    <div class="search-meal" id="searchMeal"></div>
-    <p class="status" id="sstatus" role="status"></p>
-    <div class="search-results stack-10" id="sresults"></div>`;
-  document.body.append(layer);
-  document.body.classList.add("searching");
-  fitSearchLayer();
-  renderSearchResults();
-  $("#q", layer).focus(); // dans le geste de l'utilisateur : le clavier s'ouvre aussi sur iPhone
-}
-
-function closeSearch() {
-  if (!ui.searchOpen) return;
-  ui.searchOpen = false;
-  $("#searchLayer")?.remove();
-  document.body.classList.remove("searching");
-  renderTray();
-  renderModeBody(); // relance la caméra si on était en mode Scanner
-}
-
-function renderSearchMeal() {
-  const el = $("#searchMeal");
-  if (!el) return;
-  const meal = currentMeal();
-  const n = meal?.entries.length ?? 0;
-  el.innerHTML = `
-    <span class="ellipsis"><strong>${esc(meal?.name ?? suggestMealName(defaultTime()))}</strong>${n ? ` · <span class="num">${n} · ${fmt(mealTotals(meal).kcal)} kcal</span>` : ` · <span class="muted">vide</span>`}</span>
-    <button type="button" class="btn-ink small-btn" data-act="close-search">Terminé</button>`;
-}
-
-// iPhone : la hauteur suit la zone visible au-dessus du clavier.
-function fitSearchLayer() {
-  const layer = $("#searchLayer");
-  const vv = window.visualViewport;
-  if (!layer || !vv) return;
-  layer.style.height = `${vv.height}px`;
-  layer.style.top = `${vv.offsetTop}px`;
-}
-window.visualViewport?.addEventListener("resize", fitSearchLayer);
-window.visualViewport?.addEventListener("scroll", fitSearchLayer);
 
 function setAddMode(mode) {
   if (mode === ui.addMode) return;
@@ -597,19 +581,12 @@ function productRows(items, quick) {
 }
 
 function renderResults() {
-  if (ui.searchOpen) renderSearchResults();
   const el = $("#results");
   if (!el) return;
-  renderRecents(el);
-}
-
-function renderSearchResults() {
-  const el = $("#sresults");
-  if (!el) return;
-  renderSearchMeal();
+  if (ui.addMode !== "search") return renderRecents(el);
   {
     if (!ui.results) {
-      el.innerHTML = `<p class="muted small empty">Aliments bruts (table Ciqual) et produits du commerce (Open Food Facts). Un code-barres tapé à la main marche aussi.</p>`;
+      el.innerHTML = `<p class="muted small empty">Tape un aliment ou un produit dans le champ en bas : aliments bruts (table Ciqual) et produits du commerce (Open Food Facts). Un code-barres tapé à la main marche aussi.</p>`;
       return;
     }
     const raw = ui.results.filter((p) => p.generic);
@@ -633,7 +610,7 @@ function renderRecents(el) {
 }
 
 function setStatus(msg, err = false, retry = null) {
-  const el = ui.searchOpen ? $("#sstatus") : $("#status");
+  const el = $("#status");
   if (!el) return msg && toast(msg, retry);
   el.textContent = msg;
   el.classList.toggle("err", err);
@@ -659,8 +636,10 @@ async function doSearch(q) {
   const show = (list) => {
     if (ui.query !== q) return; // une autre recherche a été lancée entre-temps
     list.forEach((p) => cache.set(p.id, p));
+    const first = !ui.results;
     ui.results = list;
     renderResults();
+    if (first) $("#results")?.scrollIntoView({ block: "start", behavior: "smooth" });
   };
   const raw = ciqual.search(q).catch(() => []);
   raw.then((r) => { if (r.length) show(r); });
@@ -772,7 +751,7 @@ async function scan() {
 }
 
 const resumeScan = (delay) => setTimeout(() => {
-  if (ui.view === "add" && ui.addMode === "scan" && !ui.searchOpen && !sheet.open && $("#vf") && !$("#vf").classList.contains("live")) scan();
+  if (ui.view === "add" && ui.addMode === "scan" && !sheet.open && $("#vf") && !$("#vf").classList.contains("live")) scan();
 }, delay);
 
 async function onScanned(code) {
@@ -1422,8 +1401,6 @@ const actions = {
   "edit-meal": (d) => editMeal(d.meal),
   "add-to-meal": (d) => { ui.mealId = d.meal; ui.results = null; ui.query = ""; go("add"); },
   "add-mode": (d) => setAddMode(d.mode),
-  "open-search": openSearch,
-  "close-search": closeSearch,
   "pick-meal": pickMealSheet,
   "choose-meal": (d) => { ui.mealId = d.meal || null; sheet.close(); renderTray(); renderResults(); },
   "tray-step": (d) => trayStep(d.entry, d.dir),
@@ -1435,7 +1412,7 @@ const actions = {
   "stop-scan": () => { stopScan(); setStatus(""); },
   "cam-zoom": toggleZoom,
   "cam-torch": toggleTorch,
-  "open-product": (d) => (ui.searchOpen && ui.results ? openFromSearch(d.id) : openProduct(d.id)),
+  "open-product": (d) => (ui.view === "add" && ui.addMode === "search" && ui.results ? openFromSearch(d.id) : openProduct(d.id)),
   "quick-add": (d) => quickAdd(d.id),
   "toggle-save": (d) => toggleSave(d.id),
   tab: (d) => { ui[d.group] = d.tab; d.group === "ptab" ? renderPLists() : renderResults(); },
