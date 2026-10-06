@@ -587,3 +587,11 @@ body.kb #toast { top: calc(env(safe-area-inset-top, 0px) + 8px); bottom: auto; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } }
+
+/* ---------- Préproduction ---------- */
+html[data-env="staging"] body::before {
+  content: "STAGING"; position: fixed; z-index: 1000; top: env(safe-area-inset-top, 0px); left: 50%;
+  transform: translateX(-50%); padding: 1px 10px; border-radius: 0 0 6px 6px;
+  background: var(--warn); color: #fff; font: 700 11px/1.6 var(--mono); letter-spacing: .08em;
+  pointer-events: none;
+}

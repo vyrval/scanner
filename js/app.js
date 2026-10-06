@@ -5,10 +5,13 @@ import { startScanner, stopScanner } from "./scanner.js";
 import { ACTIVITY_GROUPS, OTHER, activityInfo, activityKcal } from "./activities.js";
 import { NOVA, QUALITY_VERSION } from "./quality.js";
 import { VERSION } from "./version.js";
+import { STAGING, NS } from "./env.js";
 import {
   NUTRIENTS, esc, num, fmt, uid, scale, entryTotals, mealTotals, dayTotals,
   burnedKcal, sortMeals, todayKey, addDays, parseKey, keyOf, nowTime, suggestMealName,
 } from "./util.js";
+
+if (STAGING) document.documentElement.dataset.env = "staging";
 
 const $ = (s, root = document) => root.querySelector(s);
 const view = $("#view");
@@ -21,7 +24,7 @@ const ui = {
   query: "",
   results: null,     // résultats de recherche (null = listes récents/enregistrés)
   addTab: "recent",
-  addMode: (() => { try { const m = localStorage.getItem("carnet:addMode"); return ["scan", "search"].includes(m) ? m : "recent"; } catch { return "recent"; } })(),
+  addMode: (() => { try { const m = localStorage.getItem(`${NS}:addMode`); return ["scan", "search"].includes(m) ? m : "recent"; } catch { return "recent"; } })(),
   pfilter: "",
   ptab: "saved",
 };
@@ -531,7 +534,7 @@ function setAddMode(mode) {
   if (mode === ui.addMode) return;
   if (ui.addMode === "scan") stopScan();
   ui.addMode = mode;
-  try { localStorage.setItem("carnet:addMode", mode); } catch {}
+  try { localStorage.setItem(`${NS}:addMode`, mode); } catch {}
   renderModeBody();
 }
 
@@ -1270,7 +1273,7 @@ function renderSettings() {
       <input type="file" id="importFile" accept="application/json,.json" hidden>
       <button class="textbtn danger" data-act="wipe">Tout effacer…</button>
     </section>
-    <p class="muted small center">Données produits : <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a>, licence ODbL<br>Aliments bruts : <a href="https://ciqual.anses.fr" target="_blank" rel="noopener">table Ciqual 2020 de l'ANSES</a>, licence ouverte<br><span class="num">Version ${VERSION}</span></p>`;
+    <p class="muted small center">Données produits : <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a>, licence ODbL<br>Aliments bruts : <a href="https://ciqual.anses.fr" target="_blank" rel="noopener">table Ciqual 2020 de l'ANSES</a>, licence ouverte<br><span class="num">Version ${VERSION}${STAGING ? " · staging" : ""}</span></p>`;
   store.requestPersist().then((ok) => {
     const el = $("#persist");
     if (!el) return;
@@ -1450,7 +1453,7 @@ const actions = {
   export: exportBackup,
   wipe: confirmWipe,
   install,
-  "dismiss-install": () => { try { localStorage.setItem("carnet:installBanner", "off"); } catch {} render(); },
+  "dismiss-install": () => { try { localStorage.setItem(`${NS}:installBanner`, "off"); } catch {} render(); },
 };
 
 document.addEventListener("click", (e) => {
@@ -1528,7 +1531,7 @@ function installState() {
 
 }
 
-const bannerDismissed = () => { try { return localStorage.getItem("carnet:installBanner") === "off"; } catch { return false; } };
+const bannerDismissed = () => { try { return localStorage.getItem(`${NS}:installBanner`) === "off"; } catch { return false; } };
 
 function installBanner() {
   const st = installState();

@@ -15,7 +15,9 @@
 // Chaque entrée garde une copie de per100 : l'historique ne bouge pas
 // si la fiche Open Food Facts change.
 
-const KEY = "carnet:v1";
+import { NS } from "./env.js";
+
+const KEY = `${NS}:v1`;
 const listeners = new Set();
 
 const defaults = () => ({

@@ -4,11 +4,13 @@
 // - Polices Google et lecteur de code-barres : cache, mis à jour en arrière-plan.
 // - Open Food Facts : jamais mis en cache ici (l'appli garde déjà les produits).
 
-const CACHE = "carnet-v1";
+// La préproduction (/staging/) a son propre cache, que la prod ne touche pas.
+const PREFIX = self.location.pathname.includes("/staging/") ? "carnet-staging-v" : "carnet-v";
+const CACHE = PREFIX + "1";
 const SHELL = [
   "./", "index.html", "manifest.webmanifest", "css/style.css",
   "js/app.js", "js/store.js", "js/off.js", "js/scanner.js", "js/util.js",
-  "js/activities.js", "js/quality.js", "js/version.js", "js/ciqual.js", "data/ciqual.json",
+  "js/activities.js", "js/quality.js", "js/version.js", "js/env.js", "js/ciqual.js", "data/ciqual.json",
   "icons/icon.svg", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png",
 ];
 const RUNTIME_HOSTS = ["fonts.googleapis.com", "fonts.gstatic.com", "cdn.jsdelivr.net"];
@@ -19,7 +21,7 @@ self.addEventListener("install", (e) => {
 
 self.addEventListener("activate", (e) => {
   e.waitUntil((async () => {
-    for (const k of await caches.keys()) if (k !== CACHE) await caches.delete(k);
+    for (const k of await caches.keys()) if (k.startsWith(PREFIX) && k !== CACHE) await caches.delete(k);
     await self.clients.claim();
   })());
 });

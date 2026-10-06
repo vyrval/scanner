@@ -1,10 +1,13 @@
-# Déploie le site sur GitHub Pages à chaque push sur main,
-# en écrivant la vraie version (commit + date) dans js/version.js.
+# Déploie le site sur GitHub Pages à chaque push sur main ou staging.
+# Un dépôt n'a qu'un site Pages : chaque déploiement assemble les deux branches,
+#   main    → https://vyrval.github.io/scanner/
+#   staging → https://vyrval.github.io/scanner/staging/
+# en écrivant la vraie version (commit + date) dans js/version.js de chacune.
 name: Déploiement Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, staging]
   workflow_dispatch:
 
 permissions:
@@ -24,19 +27,40 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: prod
+
+      - uses: actions/checkout@v4
+        with:
+          ref: staging
+          path: staging
 
       - name: Écrire la version (commit + date, heure de Paris)
         run: |
-          SHA=$(git rev-parse --short HEAD)
-          DATE=$(TZ=Europe/Paris git log -1 --date=format-local:'%d/%m %H:%M' --format=%cd)
-          echo "export const VERSION = \"${SHA} · ${DATE}\";" > js/version.js
-          cat js/version.js
+          for dir in prod staging; do
+            SHA=$(git -C $dir rev-parse --short HEAD)
+            DATE=$(TZ=Europe/Paris git -C $dir log -1 --date=format-local:'%d/%m %H:%M' --format=%cd)
+            echo "export const VERSION = \"${SHA} · ${DATE}\";" > $dir/js/version.js
+            echo "$dir : $(cat $dir/js/version.js)"
+          done
+
+      - name: Distinguer l'appli staging une fois installée
+        run: |
+          jq '.name += " (staging)" | .short_name += " β"' staging/manifest.webmanifest > m.json
+          mv m.json staging/manifest.webmanifest
+
+      - name: Assembler le site
+        run: |
+          rm -rf prod/.git prod/.github staging/.git staging/.github
+          cp -r prod _site
+          cp -r staging _site/staging
 
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
 
       - id: deployment
         uses: actions/deploy-pages@v4
