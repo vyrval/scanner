@@ -189,13 +189,13 @@ function renderDay() {
   const budget = (g.kcal ?? 0) + burned;
   const left = budget - t.kcal;
   const meals = sortMeals(day.meals);
-  const tracked = MACROS.filter((m) => g[m.key]);
 
-  const macros = tracked.length ? `<div class="macros">${tracked.map((m) => `
+  // Apport toujours affiché ; barre et objectif seulement si un objectif est défini.
+  const macros = `<div class="macros">${MACROS.map((m) => `
     <div class="macro">
-      <div class="macro-head"><span>${m.label}</span><span class="num">${fmt(t[m.key])} / ${fmt(g[m.key])} g</span></div>
-      ${bar(t[m.key], g[m.key], m.key)}
-    </div>`).join("")}</div>` : "";
+      <div class="macro-head"><span>${m.label}</span><span class="num">${fmt(t[m.key])}${g[m.key] ? ` / ${fmt(g[m.key])}` : ""} g</span></div>
+      ${g[m.key] ? bar(t[m.key], g[m.key], m.key) : ""}
+    </div>`).join("")}</div>`;
 
   const budgetCard = g.kcal ? `
     <section class="budget">
