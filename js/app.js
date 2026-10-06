@@ -1,5 +1,6 @@
 import * as store from "./store.js";
 import * as off from "./off.js";
+import * as ciqual from "./ciqual.js";
 import { startScanner, stopScanner } from "./scanner.js";
 import { ACTIVITY_GROUPS, OTHER, activityInfo, activityKcal } from "./activities.js";
 import { NOVA, QUALITY_VERSION } from "./quality.js";
@@ -88,7 +89,7 @@ const bar = (value, goal, tone) => {
 
 const thumb = (p, big = false) => p?.image
   ? `<img class="thumb${big ? " big" : ""}" src="${esc(p.image)}" alt="">`
-  : `<span class="thumb${big ? " big" : ""}${p?.manual ? " perso" : ""}" aria-hidden="true">${esc((p?.name || "?").trim().charAt(0).toUpperCase())}</span>`;
+  : `<span class="thumb${big ? " big" : ""}${p?.manual ? " perso" : p?.generic ? " brut" : ""}" aria-hidden="true">${esc((p?.name || "?").trim().charAt(0).toUpperCase())}</span>`;
 
 const nutriChip = (g) => (g ? `<span class="ns ns-${g}">Nutri-Score ${g.toUpperCase()}</span>` : "");
 
@@ -375,7 +376,7 @@ function renderAdd() {
     </div>
     <form class="field" id="searchForm" role="search">
       ${ICON.search}
-      <input id="q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Nom du produit ou code-barres" aria-label="Rechercher un produit" value="${esc(ui.query)}">
+      <input id="q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Aliment, produit ou code-barres" aria-label="Rechercher un produit" value="${esc(ui.query)}">
     </form>
     <p class="status" id="status" role="status"></p>
     <section id="results" class="stack-10"></section>`;
@@ -413,7 +414,10 @@ function renderResults() {
   const el = $("#results");
   if (!el) return;
   if (ui.results) {
-    el.innerHTML = `<span class="eyebrow">Résultats · ${ui.results.length}</span>${productRows(ui.results, false)}`;
+    const raw = ui.results.filter((p) => p.generic);
+    const packaged = ui.results.filter((p) => !p.generic);
+    el.innerHTML = (raw.length ? `<span class="eyebrow">Aliments bruts · ${raw.length}</span>${productRows(raw, false)}` : "") +
+      (packaged.length || !raw.length ? `<span class="eyebrow">Produits du commerce · ${packaged.length}</span>${productRows(packaged, false)}` : "");
     return;
   }
   const all = Object.values(store.getState().products);
@@ -450,15 +454,21 @@ async function doSearch(q) {
   if (/^\d{8,14}$/.test(q)) return lookupCode(q);
   if (q.length < 2) return setStatus("Tape au moins 2 lettres.", true);
   setStatus("Recherche…");
-  try {
-    const res = await off.search(q);
-    res.forEach((p) => cache.set(p.id, p));
-    ui.results = res;
-    setStatus(res.length ? "" : "Aucun résultat. Essaie un autre mot, ou crée le produit dans Produits.");
+  // Aliments bruts (Ciqual, local) et produits du commerce (Open Food Facts) en parallèle :
+  // les premiers s'affichent tout de suite, même si Open Food Facts est lent ou injoignable.
+  const show = (list) => {
+    if (ui.query !== q) return; // une autre recherche a été lancée entre-temps
+    list.forEach((p) => cache.set(p.id, p));
+    ui.results = list;
     renderResults();
-  } catch (e) {
-    setStatus(e.message, true);
-  }
+  };
+  const raw = ciqual.search(q).catch(() => []);
+  raw.then((r) => { if (r.length) show(r); });
+  const [generic, packaged] = await Promise.all([raw, off.search(q).then((r) => ({ r }), (e) => ({ e }))]);
+  if (ui.query !== q) return;
+  show([...generic, ...(packaged.r ?? [])]);
+  if (packaged.e) setStatus(generic.length ? "Produits du commerce indisponibles pour l'instant (Open Food Facts)." : packaged.e.message, !generic.length);
+  else setStatus(ui.results.length ? "" : "Aucun résultat. Essaie un autre mot, ou crée le produit dans Produits.");
 }
 
 let lookingUp = null;
@@ -571,15 +581,16 @@ function stopScan() { stopScanner(); scanUI(false); }
 const storable = (p) => ({
   id: p.id, code: p.code ?? null, name: p.name, brand: p.brand ?? "", quantity: p.quantity ?? "",
   image: p.image ?? "", nutriscore: p.nutriscore ?? "", serving: p.serving ?? null,
-  per100: { ...p.per100 }, ...(p.manual ? { manual: true } : {}),
+  per100: { ...p.per100 }, ...(p.manual ? { manual: true } : {}), ...(p.generic ? { generic: true } : {}),
   ...(p.quality ? { quality: p.quality, nova: p.quality.nova } : p.nova ? { nova: p.nova } : {}),
 });
 
+const GENERIC_LABEL = "Aliment brut · Ciqual";
 const novaOf = (p) => p?.quality?.nova ?? p?.nova ?? null;
 const novaChip = (g) => (g ? `<span class="nova nova-${g}" title="${NOVA[g].desc}">NOVA ${g} · ${NOVA[g].label}</span>` : "");
 
 function qualityBlock(p) {
-  if (p.manual) return "";
+  if (p.manual || p.generic) return "";
   const q = p.quality;
   if (!q) return `<section class="quality" id="quality"><p class="muted small">Chargement de la composition…</p></section>`;
   const nova = q.nova;
@@ -649,7 +660,7 @@ function openProduct(id) {
       ${thumb(p, true)}
       <div class="phead-text">
         <h2 class="display">${esc(p.name)}</h2>
-        <span class="muted small">${esc([p.brand, p.quantity].filter(Boolean).join(" · ")) || (p.manual ? "Recette perso" : "")}</span>
+        <span class="muted small">${esc([p.brand, p.quantity].filter(Boolean).join(" · ")) || (p.manual ? "Recette perso" : p.generic ? GENERIC_LABEL : "")}</span>
         <span class="chips tight">${nutriChip(p.nutriscore)}<span id="novaHead">${novaChip(novaOf(p))}</span></span>
       </div>
       <button type="button" class="iconbtn" id="starBtn" data-act="toggle-save" data-id="${esc(id)}"
@@ -662,6 +673,7 @@ function openProduct(id) {
     ${qualityBlock(p)}
     ${nutritionLabel(p)}
     ${p.code && !p.manual ? `<p class="muted small center"><a href="https://world.openfoodfacts.org/product/${esc(p.code)}" target="_blank" rel="noopener">Voir sur Open Food Facts</a></p>` : ""}
+    ${p.generic ? `<p class="muted small center">Valeurs moyennes · <a href="https://ciqual.anses.fr/#/aliments/${esc(p.id.slice(ciqual.PREFIX.length))}" target="_blank" rel="noopener">table Ciqual de l'ANSES</a></p>` : ""}
   `, (_, fd) => {
     const qty = num(fd.get("qty"));
     if (!qty || qty <= 0) return false;
@@ -912,6 +924,7 @@ function renderPLists() {
     .sort(ui.ptab === "saved" ? (a, b) => a.name.localeCompare(b.name, "fr") : (a, b) => (b.lastUsed ?? 0) - (a.lastUsed ?? 0));
   const sub = (p) => p.manual
     ? ["Recette perso", p.serving ? `portion ${fmt(p.serving)} g` : ""].filter(Boolean).join(" · ")
+    : p.generic ? GENERIC_LABEL
     : [p.brand, p.quantity].filter(Boolean).join(" · ");
   el.innerHTML =
     seg("ptab", [["saved", `Enregistrés · ${saved.length}`], ["used", `Déjà utilisés · ${used.length}`]], ui.ptab) +
@@ -999,7 +1012,7 @@ function renderSettings() {
       <input type="file" id="importFile" accept="application/json,.json" hidden>
       <button class="textbtn danger" data-act="wipe">Tout effacer…</button>
     </section>
-    <p class="muted small center">Données produits : <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a>, licence ODbL<br><span class="num">Version ${VERSION}</span></p>`;
+    <p class="muted small center">Données produits : <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a>, licence ODbL<br>Aliments bruts : <a href="https://ciqual.anses.fr" target="_blank" rel="noopener">table Ciqual 2020 de l'ANSES</a>, licence ouverte<br><span class="num">Version ${VERSION}</span></p>`;
   store.requestPersist().then((ok) => {
     const el = $("#persist");
     if (!el) return;
@@ -1128,7 +1141,7 @@ $("#toast").addEventListener("click", (e) => {
 
 // Résultat de recherche : on recharge la fiche complète (valeurs nutritionnelles, photo).
 async function openFromSearch(id) {
-  if (store.getState().products[id]) return openProduct(id);
+  if (store.getState().products[id] || cache.get(id)?.generic) return openProduct(id);
   setStatus("Chargement de la fiche…");
   try {
     const p = await off.getByCode(id);

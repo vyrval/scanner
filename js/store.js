@@ -6,7 +6,8 @@
 //   profile:  { weight }                               (kg)
 //   lastActivity: clé de la dernière activité saisie
 //   products: { [id]: { id, code, name, brand, quantity, image, nutriscore,
-//                        serving, per100, manual?, saved, lastUsed } }
+//                        serving, per100, manual?, generic?, saved, lastUsed } }
+//                        (generic : aliment brut Ciqual, id « ciqual-<code> »)
 //   days:     { "YYYY-MM-DD": { meals: [{ id, name, time, entries: [
 //                   { id, productId, name, brand, qty, per100 } ] }],
 //                 activities: [{ id, type, name, minutes, kcal, manual }] } }

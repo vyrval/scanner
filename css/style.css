@@ -227,6 +227,7 @@ svg.filled { fill: var(--accent); stroke: var(--accent); }
 }
 img.thumb { background: #FFFFFF; }
 .thumb.perso { background: var(--accent-soft); color: var(--accent-ink); }
+.thumb.brut { background: color-mix(in srgb, var(--carbs) 16%, var(--surface)); color: var(--carbs); }
 .thumb.big { width: 64px; height: 64px; border-radius: 14px; font-size: 26px; }
 .prow { display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--surface); border-radius: 16px; }
 .prow-main { flex-grow: 1; min-width: 0; display: flex; align-items: center; gap: 12px; border: 0; background: none; padding: 0; text-align: left; color: var(--ink); }
