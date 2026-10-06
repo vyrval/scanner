@@ -518,7 +518,7 @@ body.no-tabbar main.composing, main:has(.compose-head) { padding-bottom: calc(en
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 13px; font-weight: 700;
 }
 .mode svg { width: 22px; height: 22px; }
-.mode[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.mode[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 
 .viewfinder.compact { height: 170px; }
 .viewfinder.compact .ghostcode { width: 140px; height: 58px; margin-top: -30px; }
@@ -557,7 +557,25 @@ main:has(.compose-head) ~ #toast { bottom: calc(env(safe-area-inset-bottom, 0px)
 }
 @media (prefers-color-scheme: dark) { #toast button { color: #12663B; } }
 
-/* Clavier ouvert sur la recherche : place pour faire remonter le champ, barre masquée */
-#searchForm { scroll-margin-top: calc(env(safe-area-inset-top, 0px) + 12px); }
-body.kb main { padding-bottom: 75vh; }
-body.kb .compose-bar { display: none; }
+
+/* ---------- Écran de recherche ---------- */
+.search-layer {
+  position: fixed; left: 0; right: 0; top: 0; height: 100dvh; z-index: 8;
+  display: flex; flex-direction: column; background: var(--bg);
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.search-top { display: flex; align-items: center; gap: 4px; padding: 10px 16px 8px 8px; flex-shrink: 0; }
+.search-top .field { flex-grow: 1; min-width: 0; }
+.search-meal {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0;
+  margin: 0 16px 8px; padding: 6px 6px 6px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); font-size: 14px;
+}
+.search-meal .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.search-layer .status { margin: 0 18px 6px; flex-shrink: 0; }
+.search-results {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: 4px 16px calc(env(safe-area-inset-bottom, 0px) + 24px); -webkit-overflow-scrolling: touch;
+}
+body.searching { overflow: hidden; }
+body.searching .compose-bar { display: none; }
+body.searching #toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); z-index: 9; }
