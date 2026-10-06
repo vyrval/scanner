@@ -104,12 +104,7 @@ svg.filled { fill: var(--accent); stroke: var(--accent); }
   min-height: 48px; padding: 0 12px; border: 1px solid var(--line); border-radius: 12px;
   background: var(--surface); font-size: 16px; font-weight: 400; width: 100%; min-width: 0;
 }
-.flabel input[inputmode] { font-family: var(--mono); }
-fieldset.flabel { border: 0; padding: 0; margin: 0; min-width: 0; }
-fieldset.flabel legend { padding: 0; margin-bottom: 6px; }
-.timepick { display: flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 700; }
-.timepick .selectwrap { flex: 1; }
-.timepick select { font-family: var(--mono); }
+.flabel input[inputmode], .flabel input[type="time"] { font-family: var(--mono); }
 
 .seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; padding: 4px; background: var(--seg); border-radius: 12px; }
 .seg button { min-height: 40px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font-size: 14px; font-weight: 700; }
