@@ -21,6 +21,7 @@ const ui = {
   query: "",
   results: null,     // résultats de recherche (null = listes récents/enregistrés)
   addTab: "recent",
+  addMode: (() => { try { return localStorage.getItem("carnet:addMode") || "recent"; } catch { return "recent"; } })(),
   pfilter: "",
   ptab: "saved",
 };
@@ -44,6 +45,9 @@ const ICON = {
   plus: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>`,
   minus: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>`,
   close: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`,
+  check: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`,
+  clock: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>`,
+  barcode: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6v12M7 6v12M10.5 6v12M13 6v12M16.5 6v12M20 6v12"/></svg>`,
   torch: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h8l-1 5H9zM9 8h6l-1 6v7h-4v-7z"/><path d="M12 14v2"/></svg>`,
   more: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg>`,
   trash: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>`,
@@ -165,7 +169,7 @@ function go(v) {
 }
 
 function render() {
-  document.body.classList.toggle("no-tabbar", ui.view === "settings");
+  document.body.classList.toggle("no-tabbar", ui.view === "settings" || ui.view === "add");
   document.querySelectorAll("[data-nav]").forEach((b) =>
     b.setAttribute("aria-current", b.dataset.nav === ui.view ? "page" : "false"));
   ({ day: renderDay, add: renderAdd, products: renderProducts, settings: renderSettings })[ui.view]();
@@ -173,7 +177,7 @@ function render() {
 
 // Sur la vue Ajouter, on ne redessine pas tout : la caméra tourne peut-être.
 store.subscribe(() => {
-  if (ui.view === "add") { renderTarget(); renderResults(); }
+  if (ui.view === "add") { renderTray(); if (ui.addMode !== "scan") renderResults(); }
   else if (ui.view === "products") renderPLists();
   else render();
 });
@@ -354,74 +358,208 @@ const GHOST_CODE = `<svg class="ghostcode" viewBox="0 0 170 70" aria-hidden="tru
   [[0,6],[10,3],[17,8],[29,3],[36,5],[46,3],[53,9],[66,3],[73,5],[83,3],[90,7],[101,3],[108,5],[118,8],[130,3],[137,6],[147,3],[154,7],[165,5]]
     .map(([x, w]) => `<rect x="${x}" y="0" width="${w}" height="70"/>`).join("")}</svg>`;
 
-function renderAdd() {
-  view.innerHTML = `
-    <h1 class="title">Ajouter</h1>
-    <label class="field" for="mealSel"><span class="muted small">Dans</span><select id="mealSel"></select>${ICON.down}</label>
-    <div class="viewfinder" id="vf">
-      <video id="video" playsinline muted hidden></video>
-      ${GHOST_CODE}
-      <span class="corner c-tl"></span><span class="corner c-tr"></span><span class="corner c-bl"></span><span class="corner c-br"></span>
-      <span class="scanline" id="scanline" hidden></span>
-      <div class="vf-tools" id="vfTools" hidden>
-        <button type="button" class="vf-btn" id="zoomBtn" data-act="cam-zoom" hidden aria-label="Zoom">2×</button>
-        <button type="button" class="vf-btn" id="torchBtn" data-act="cam-torch" hidden aria-label="Lampe" aria-pressed="false">${ICON.torch}</button>
-      </div>
-      <span class="focus-ring" id="focusRing" hidden></span>
-      <div class="vf-bar">
-        <span class="vf-hint" id="vfHint">Scanne le code-barres d'un produit</span>
-        <button class="pill-light" data-act="scan" id="scanBtn">Scanner</button>
-        <button class="pill-light" data-act="stop-scan" id="stopBtn" hidden>Arrêter</button>
-      </div>
-    </div>
-    <form class="field" id="searchForm" role="search">
-      ${ICON.search}
-      <input id="q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Aliment, produit ou code-barres" aria-label="Rechercher un produit" value="${esc(ui.query)}">
-    </form>
-    <p class="status" id="status" role="status"></p>
-    <section id="results" class="stack-10"></section>`;
-  renderTarget();
-  renderResults();
+// ======================================================================
+// Composer le repas (piste C) : panier en haut, trois modes d'ajout en bas.
+// Chaque ajout est enregistré tout de suite dans le repas (rien n'est perdu
+// si l'appli se ferme) et peut être annulé. « Valider » ferme simplement.
+// ======================================================================
+const ADD_MODES = [
+  ["scan", "Scanner", "barcode"],
+  ["search", "Chercher", "search"],
+  ["recent", "Récents", "clock"],
+];
+
+const currentMeal = () => store.getDay(ui.date).meals.find((m) => m.id === ui.mealId) ?? null;
+
+// Depuis le bouton Ajouter : on reprend le repas d'aujourd'hui commencé il y a
+// moins de 90 min (on complète souvent un repas en cours), sinon un nouveau.
+function guessMeal() {
+  if (ui.date !== todayKey()) return null;
+  const toMin = (t) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+  const now = toMin(nowTime());
+  const near = sortMeals(store.getDay(ui.date).meals)
+    .filter((m) => m.entries.length && Math.abs(now - toMin(m.time)) <= 90);
+  return near.at(-1)?.id ?? null;
 }
 
-function renderTarget() {
-  const el = $("#mealSel");
+function renderAdd() {
+  if (ui.mealId && !currentMeal()) ui.mealId = null;
+  view.innerHTML = `
+    <header class="compose-head">
+      <button class="iconbtn soft" data-act="close-compose" aria-label="Fermer">${ICON.close}</button>
+      <h1 class="title">Composer le repas</h1>
+    </header>
+    <section class="card tray" id="tray" aria-live="polite"></section>
+    <div class="modes" role="tablist" aria-label="Façon d'ajouter">
+      ${ADD_MODES.map(([k, label, icon]) => `<button role="tab" class="mode" data-act="add-mode" data-mode="${k}" aria-selected="${ui.addMode === k}">${ICON[icon]}<span>${label}</span></button>`).join("")}
+    </div>
+    <section id="modeBody" class="stack-10"></section>
+    <div class="compose-bar" id="composeBar"></div>`;
+  renderTray();
+  renderModeBody();
+}
+
+function renderTray() {
+  const el = $("#tray");
   if (!el) return;
+  const meal = currentMeal();
+  const name = meal?.name ?? suggestMealName(defaultTime());
+  const time = meal?.time ?? defaultTime();
+  const t = meal ? mealTotals(meal) : { kcal: 0, prot: 0 };
+  const g = store.getState().goals;
+  const day = store.getDay(ui.date);
+  const left = (g.kcal ?? 0) + burnedKcal(day) - dayTotals(day).kcal;
+  const products = store.getState().products;
+
+  el.innerHTML = `
+    <div class="rule-head">
+      <button type="button" class="linkish tray-meal" data-act="pick-meal" aria-label="Changer de repas">
+        <h2>${esc(name)}</h2><span class="num muted">${time}</span>${ICON.down}
+      </button>
+      <span class="num">${fmt(t.kcal)} kcal</span>
+    </div>
+    ${meal?.entries.length ? meal.entries.map((e) => `
+      <div class="tray-row">
+        <button type="button" class="tray-name" data-act="edit-entry" data-meal="${meal.id}" data-entry="${e.id}">
+          ${thumb(products[e.productId] ?? { name: e.name })}<span>${esc(e.name)}</span>
+        </button>
+        <span class="tray-step">
+          <button type="button" data-act="tray-step" data-entry="${e.id}" data-dir="-1" aria-label="Retirer 10 g de ${esc(e.name)}">${ICON.minus}</button>
+          <span class="num">${fmt(e.qty)} g</span>
+          <button type="button" data-act="tray-step" data-entry="${e.id}" data-dir="1" aria-label="Ajouter 10 g de ${esc(e.name)}">${ICON.plus}</button>
+        </span>
+        <span class="num tray-kcal">${fmt(entryTotals(e).kcal)}</span>
+      </div>`).join("")
+      : `<p class="muted small tray-empty">${meal ? "Repas vide." : "Nouveau repas."} Scanne un produit, cherche un aliment ou reprends un de tes récents : chaque ajout arrive ici.</p>`}
+    ${meal?.entries.length ? `<div class="tray-foot small muted">
+      <span class="num">${fmt(t.prot, 1)} g prot.</span>
+      ${g.kcal ? `<span>Il te reste <span class="num ink">${fmt(left)} kcal</span> ${ui.date === todayKey() ? "aujourd'hui" : "ce jour-là"}</span>` : ""}
+    </div>` : ""}`;
+
+  const bar = $("#composeBar");
+  const n = meal?.entries.length ?? 0;
+  if (bar) bar.innerHTML = n
+    ? `<button class="cta wide-cta" data-act="close-compose" aria-label="Valider le repas, ${n} aliment${n > 1 ? "s" : ""}">${ICON.check}<span class="ellipsis">Valider ${esc(toMeal(name).replace(/^(au|à la|à l'|à) /, "le "))}</span><span class="count num">${n}</span></button>`
+    : `<button class="btn-outline wide-cta" data-act="close-compose">Terminer</button>`;
+}
+
+function renderModeBody() {
+  const el = $("#modeBody");
+  if (!el) return;
+  document.querySelectorAll(".mode").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.mode === ui.addMode)));
+  if (ui.addMode === "scan") {
+    el.innerHTML = `
+      <div class="viewfinder compact" id="vf">
+        <video id="video" playsinline muted hidden></video>
+        ${GHOST_CODE}
+        <span class="corner c-tl"></span><span class="corner c-tr"></span><span class="corner c-bl"></span><span class="corner c-br"></span>
+        <span class="scanline" id="scanline" hidden></span>
+        <div class="vf-tools" id="vfTools" hidden>
+          <button type="button" class="vf-btn" id="zoomBtn" data-act="cam-zoom" hidden aria-label="Zoom">2×</button>
+          <button type="button" class="vf-btn" id="torchBtn" data-act="cam-torch" hidden aria-label="Lampe" aria-pressed="false">${ICON.torch}</button>
+        </div>
+        <span class="focus-ring" id="focusRing" hidden></span>
+        <div class="vf-bar">
+          <span class="vf-hint" id="vfHint">Scan en continu : chaque produit s'ajoute au repas</span>
+          <button class="pill-light" data-act="scan" id="scanBtn">Scanner</button>
+          <button class="pill-light" data-act="stop-scan" id="stopBtn" hidden>Pause</button>
+        </div>
+      </div>
+      <p class="status" id="status" role="status"></p>`;
+    scan();
+  } else if (ui.addMode === "search") {
+    el.innerHTML = `
+      <form class="field" id="searchForm" role="search">
+        ${ICON.search}
+        <input id="q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Aliment, produit ou code-barres" aria-label="Rechercher un aliment ou un produit" value="${esc(ui.query)}">
+      </form>
+      <p class="status" id="status" role="status"></p>
+      <section id="results" class="stack-10"></section>`;
+    renderResults();
+    if (!ui.results) setTimeout(() => $("#q")?.focus(), 50);
+  } else {
+    el.innerHTML = `<p class="status" id="status" role="status"></p><section id="results" class="stack-10"></section>`;
+    renderResults();
+  }
+}
+
+function setAddMode(mode) {
+  if (mode === ui.addMode) return;
+  if (ui.addMode === "scan") stopScan();
+  ui.addMode = mode;
+  try { localStorage.setItem("carnet:addMode", mode); } catch {}
+  renderModeBody();
+}
+
+function pickMealSheet() {
   const meals = sortMeals(store.getDay(ui.date).meals);
-  if (!meals.some((m) => m.id === ui.mealId)) ui.mealId = null;
-  const day = ui.date === todayKey() ? "" : ` (${relLabel(ui.date).toLowerCase()})`;
-  el.innerHTML = meals.map((m) =>
-    `<option value="${m.id}"${m.id === ui.mealId ? " selected" : ""}>${esc(m.name)} · ${m.time} · ${fmt(mealTotals(m).kcal)} kcal${day}</option>`).join("") +
-    `<option value=""${ui.mealId ? "" : " selected"}>Nouveau repas · ${esc(suggestMealName(defaultTime()))}${day}</option>`;
+  openSheet(`
+    <h2 class="sheet-title">Ajouter à quel repas ?</h2>
+    <div class="stack-8">
+      ${meals.map((m) => `<button type="button" class="meal-choice${m.id === ui.mealId ? " on" : ""}" data-act="choose-meal" data-meal="${m.id}">
+        <span><strong>${esc(m.name)}</strong> <span class="num muted">${m.time}</span></span><span class="num">${fmt(mealTotals(m).kcal)} kcal</span></button>`).join("")}
+      <button type="button" class="meal-choice new${ui.mealId ? "" : " on"}" data-act="choose-meal" data-meal="">
+        <span><strong>Nouveau repas</strong> <span class="muted">· ${esc(suggestMealName(defaultTime()))} ${defaultTime()}</span></span>${ICON.plus}</button>
+    </div>
+    <p class="muted small">Pour renommer un repas ou changer son heure : bouton ⋯ dans la Journée.</p>`, () => {});
+}
+
+function trayStep(entryId, dir) {
+  const meal = currentMeal();
+  const e = meal?.entries.find((x) => x.id === entryId);
+  if (!e) return;
+  const next = Math.round(e.qty / 10) * 10 + 10 * Number(dir);
+  if (next <= 0) {
+    // en dessous de 10 g : on retire la ligne, avec annulation
+    const backup = { ...e }, idx = meal.entries.indexOf(e), mealId = meal.id, date = ui.date;
+    store.update((s) => { const m = store.ensureDay(s, date).meals.find((x) => x.id === mealId); m.entries = m.entries.filter((x) => x.id !== entryId); });
+    return toast(`${e.name} retiré`, { label: "Annuler", run: () => store.update((s) => {
+      const m = store.ensureDay(s, date).meals.find((x) => x.id === mealId);
+      if (m) m.entries.splice(idx, 0, backup);
+    }) });
+  }
+  store.update((s) => { store.ensureDay(s, ui.date).meals.find((x) => x.id === meal.id).entries.find((x) => x.id === entryId).qty = next; });
+}
+
+function closeCompose() {
+  stopScan();
+  const meal = currentMeal();
+  go("day");
+  if (meal?.entries.length) toast(`${meal.name} enregistré · ${fmt(mealTotals(meal).kcal)} kcal`);
 }
 
 const quickQty = (p) => p.lastQty ?? p.serving ?? 100;
 
 function productRows(items, quick) {
+  const inMeal = new Set((currentMeal()?.entries ?? []).map((e) => e.productId));
   return `<div class="stack-8">${items.map((p) => `
-    <div class="prow">
+    <div class="prow${inMeal.has(p.id) ? " in-meal" : ""}">
       <button class="prow-main" data-act="open-product" data-id="${esc(p.id)}">
         ${thumb(p)}
         <span class="prow-text"><span class="pname">${esc(p.name)}</span>
           <small class="num">${[p.per100.kcal != null ? `${fmt(p.per100.kcal)} kcal / 100 g` : esc(p.brand),
             p.nutriscore ? `Nutri-Score ${p.nutriscore.toUpperCase()}` : "", novaOf(p) ? `NOVA ${novaOf(p)}` : ""].filter(Boolean).join(" · ")}</small></span>
       </button>
-      ${quick ? `<button class="quick num" data-act="quick-add" data-id="${esc(p.id)}" aria-label="Ajouter ${fmt(quickQty(p))} g de ${esc(p.name)}">+ ${fmt(quickQty(p))} g</button>` : ""}
+      ${quick && p.per100.kcal != null ? `<button class="quick num" data-act="quick-add" data-id="${esc(p.id)}" aria-label="Ajouter ${fmt(quickQty(p))} g de ${esc(p.name)}">${inMeal.has(p.id) ? ICON.check : "+"} ${fmt(quickQty(p))} g</button>` : ""}
     </div>`).join("")}</div>`;
 }
 
 function renderResults() {
   const el = $("#results");
   if (!el) return;
-  if (ui.results) {
+  if (ui.addMode === "search") {
+    if (!ui.results) {
+      el.innerHTML = `<p class="muted small empty">Aliments bruts (table Ciqual) et produits du commerce (Open Food Facts). Un code-barres tapé à la main marche aussi.</p>`;
+      return;
+    }
     const raw = ui.results.filter((p) => p.generic);
     const packaged = ui.results.filter((p) => !p.generic);
-    el.innerHTML = (raw.length ? `<span class="eyebrow">Aliments bruts · ${raw.length}</span>${productRows(raw, false)}` : "") +
-      (packaged.length || !raw.length ? `<span class="eyebrow">Produits du commerce · ${packaged.length}</span>${productRows(packaged, false)}` : "");
+    el.innerHTML = (raw.length ? `<span class="eyebrow">Aliments bruts · ${raw.length}</span>${productRows(raw, true)}` : "") +
+      (packaged.length || !raw.length ? `<span class="eyebrow">Produits du commerce · ${packaged.length}</span>${productRows(packaged, true)}` : "");
     return;
   }
   const all = Object.values(store.getState().products);
-  const recent = all.filter((p) => p.lastUsed).sort((a, b) => b.lastUsed - a.lastUsed).slice(0, 15);
+  const recent = all.filter((p) => p.lastUsed).sort((a, b) => b.lastUsed - a.lastUsed).slice(0, 20);
   const saved = all.filter((p) => p.saved).sort((a, b) => a.name.localeCompare(b.name, "fr"));
   const list = ui.addTab === "saved" ? saved : recent;
   el.innerHTML =
@@ -497,7 +635,7 @@ function scanUI(on) {
   $("#scanline").hidden = !on;
   $("#scanBtn").hidden = on;
   $("#stopBtn").hidden = !on;
-  $("#vfHint").textContent = on ? "À 15–20 cm · touche l'image pour la mise au point" : "Scanne le code-barres d'un produit";
+  $("#vfHint").textContent = on ? "À 15–20 cm · touche l'image pour la mise au point" : "Scan en continu : chaque produit s'ajoute au repas";
   if (!on) { cam = null; $("#vfTools").hidden = true; $("#focusRing").hidden = true; }
 }
 
@@ -555,21 +693,58 @@ function focusTap(e) {
   setTimeout(() => { ring.hidden = true; }, 900);
 }
 
+// Scan en continu : un code lu = produit ajouté au repas, puis la caméra repart.
+let lastAdded = { code: null, at: 0 };
 async function scan() {
+  if (ui.view !== "add" || ui.addMode !== "scan") return;
   scanUI(true);
   setStatus("");
   try {
-    const controls = await startScanner($("#video"), (code) => {
-      scanUI(false);
-      navigator.vibrate?.(60);
-      $("#q").value = code;
-      ui.query = code;
-      lookupCode(code);
-    });
+    const controls = await startScanner($("#video"), onScanned);
     if (controls) setupCameraTools(controls);
   } catch (e) {
     scanUI(false);
-    setStatus(e.message, true);
+    // caméra coupée parce qu'on a quitté l'écran entre-temps : rien à signaler
+    if (ui.view === "add" && ui.addMode === "scan" && e.name !== "AbortError") setStatus(e.message, true);
+  }
+}
+
+const resumeScan = (delay) => setTimeout(() => {
+  if (ui.view === "add" && ui.addMode === "scan" && !sheet.open && $("#vf") && !$("#vf").classList.contains("live")) scan();
+}, delay);
+
+async function onScanned(code) {
+  scanUI(false);
+  // le même produit relu juste après (ou pendant) son ajout : on l'ignore,
+  // on vise sans doute encore le paquet
+  // (fenêtre glissante : tant que le code reste visible, il n'est pas rajouté ;
+  // pour en mettre deux, + dans le panier ou viser ailleurs 4 s)
+  if (code === lastAdded.code && Date.now() - lastAdded.at < 4000) { lastAdded.at = Date.now(); return resumeScan(600); }
+  lastAdded = { code, at: Date.now() };
+  navigator.vibrate?.(60);
+  setStatus(`Recherche de ${code}…`);
+  const local = store.getState().products[code];
+  try {
+    const p = (await off.getByCode(code)) ?? local;
+    if (!p) {
+      setStatus(`Le code ${code} n'est pas dans Open Food Facts. Crée le produit dans Produits.`, true);
+      return resumeScan(2500);
+    }
+    if (p.per100?.kcal == null) {
+      // pas de valeurs nutritionnelles : on ouvre la fiche plutôt que d'ajouter 0 kcal
+      cache.set(p.id, p);
+      setStatus("");
+      return openProduct(p.id);
+    }
+    cache.set(p.id, p);
+    setStatus("");
+    lastAdded = { code, at: Date.now() };
+    if (ui.view !== "add") return; // écran quitté pendant la recherche
+    addEntry(p, quickQty(local ?? p), ui.mealId);
+    resumeScan(1200);
+  } catch (e) {
+    if (local) { lastAdded = { code, at: Date.now() }; addEntry(local, quickQty(local), ui.mealId); return resumeScan(1200); }
+    setStatus(e.message, true, { label: "Réessayer", run: () => onScanned(code) });
   }
 }
 
@@ -692,7 +867,8 @@ function openProduct(id) {
 }
 
 function addEntry(p, qty, mealChoice) {
-  let mealName = "";
+  let mealName = "", mealId = null, created = false;
+  const entryId = uid(), date = ui.date;
   store.update((s) => {
     const d = store.ensureDay(s, ui.date);
     let meal = d.meals.find((m) => m.id === mealChoice);
@@ -700,16 +876,27 @@ function addEntry(p, qty, mealChoice) {
       const time = defaultTime();
       meal = { id: uid(), name: suggestMealName(time), time, entries: [] };
       d.meals.push(meal);
+      created = true;
     }
-    ui.mealId = meal.id;
+    ui.mealId = mealId = meal.id;
     mealName = meal.name;
-    meal.entries.push({ id: uid(), productId: p.id, name: p.name, brand: p.brand ?? "", qty, per100: { ...p.per100 } });
+    meal.entries.push({ id: entryId, productId: p.id, name: p.name, brand: p.brand ?? "", qty, per100: { ...p.per100 } });
     const cur = s.products[p.id];
     const fresh = cache.get(p.id) ?? p; // peut avoir été complété en arrière-plan
     const quality = fresh.quality ?? cur?.quality;
     s.products[p.id] = { ...storable({ ...fresh, ...(quality ? { quality } : {}) }), saved: cur?.saved ?? false, lastUsed: Date.now(), lastQty: qty };
   });
-  toast(`${p.name} · ${fmt(qty)} g ajouté ${toMeal(mealName)}`);
+  toast(`${p.name} · ${fmt(qty)} g ajouté ${toMeal(mealName)}`, { label: "Annuler", run: () => {
+    store.update((s) => {
+      const d = store.ensureDay(s, date);
+      const m = d.meals.find((x) => x.id === mealId);
+      if (!m) return;
+      m.entries = m.entries.filter((x) => x.id !== entryId);
+      if (created && !m.entries.length) d.meals = d.meals.filter((x) => x.id !== mealId);
+      store.pruneDay(s, date);
+    });
+    if (created && !store.getDay(date).meals.some((m) => m.id === mealId)) { ui.mealId = null; renderTray(); }
+  } });
 }
 
 function quickAdd(id) {
@@ -1070,6 +1257,7 @@ function openSheet(html, onSubmit) {
 }
 
 sheet.addEventListener("click", (e) => { if (e.target === sheet) sheet.close(); });
+sheet.addEventListener("close", () => { if (ui.view === "add" && ui.addMode === "scan") resumeScan(400); });
 
 // Glisser vers le bas pour fermer : depuis la poignée, ou n'importe où
 // quand la feuille est déjà en haut de son défilement.
@@ -1171,6 +1359,11 @@ const actions = {
   "new-meal": newMeal,
   "edit-meal": (d) => editMeal(d.meal),
   "add-to-meal": (d) => { ui.mealId = d.meal; ui.results = null; ui.query = ""; go("add"); },
+  "add-mode": (d) => setAddMode(d.mode),
+  "pick-meal": pickMealSheet,
+  "choose-meal": (d) => { ui.mealId = d.meal || null; sheet.close(); renderTray(); renderResults(); },
+  "tray-step": (d) => trayStep(d.entry, d.dir),
+  "close-compose": closeCompose,
   "edit-entry": (d) => editEntry(d.meal, d.entry),
   "new-activity": () => editActivity(null),
   "edit-activity": (d) => editActivity(d.id),
@@ -1195,7 +1388,7 @@ document.addEventListener("click", (e) => {
   if (!b) return;
   if (b.dataset.nav) {
     if (sheet.open) sheet.close();
-    if (b.dataset.nav === "add" && ui.view !== "add") { ui.results = null; ui.query = ""; }
+    if (b.dataset.nav === "add" && ui.view !== "add") { ui.results = null; ui.query = ""; ui.mealId = guessMeal(); }
     return go(b.dataset.nav);
   }
   if (b.dataset.setQty || b.dataset.step) {
@@ -1239,6 +1432,7 @@ document.addEventListener("change", (e) => {
 let lastToday = todayKey();
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") return stopScan();
+  if (ui.view === "add" && ui.addMode === "scan") resumeScan(300);
   const t = todayKey();
   if (t !== lastToday) {
     if (ui.date === lastToday) ui.date = t;
