@@ -825,7 +825,7 @@ const novaOf = (p) => p?.quality?.nova ?? p?.nova ?? null;
 const novaChip = (g) => (g ? `<span class="nova nova-${g}" title="${NOVA[g].desc}">NOVA ${g} · ${NOVA[g].label}</span>` : "");
 
 function qualityBlock(p) {
-  if (p.manual || p.generic) return "";
+  if (p.manual || p.generic || !p.code) return "";
   const q = p.quality;
   if (!q) return `<section class="quality" id="quality"><p class="muted small">Chargement de la composition…</p></section>`;
   const nova = q.nova;
@@ -883,6 +883,30 @@ function mealNameFor(choice) {
   return m ? m.name : suggestMealName(defaultTime());
 }
 
+// En-tête et infos communes à la fiche produit, qu'on ajoute le produit
+// ou qu'on modifie une entrée déjà dans un repas : même page partout.
+function productHead(p, id, stored) {
+  return `
+    <div class="phead">
+      ${thumb(p, true)}
+      <div class="phead-text">
+        <h2 class="display">${esc(p.name)}</h2>
+        <span class="muted small">${esc([p.brand, p.quantity].filter(Boolean).join(" · ")) || (p.manual ? "Recette perso" : p.generic ? GENERIC_LABEL : "")}</span>
+        <span class="chips tight">${nutriChip(p.nutriscore)}<span id="novaHead">${novaChip(novaOf(p))}</span></span>
+      </div>
+      ${findProduct(id) ? `<button type="button" class="iconbtn" id="starBtn" data-act="toggle-save" data-id="${esc(id)}"
+        aria-pressed="${!!stored?.saved}" aria-label="Enregistrer le produit">${stored?.saved ? ICON.starFill : ICON.star}</button>` : ""}
+    </div>`;
+}
+
+function productInfo(p) {
+  return `
+    ${qualityBlock(p)}
+    ${nutritionLabel(p)}
+    ${p.code && !p.manual ? `<p class="muted small center"><a href="https://world.openfoodfacts.org/product/${esc(p.code)}" target="_blank" rel="noopener">Voir sur Open Food Facts</a></p>` : ""}
+    ${p.generic ? `<p class="muted small center">Valeurs moyennes · <a href="https://ciqual.anses.fr/#/aliments/${esc(p.id.slice(ciqual.PREFIX.length))}" target="_blank" rel="noopener">table Ciqual de l'ANSES</a></p>` : ""}`;
+}
+
 function openProduct(id) {
   const p = findProduct(id);
   if (!p) return;
@@ -891,24 +915,12 @@ function openProduct(id) {
   const dayWord = relLabel(ui.date).toLowerCase();
 
   openSheet(`
-    <div class="phead">
-      ${thumb(p, true)}
-      <div class="phead-text">
-        <h2 class="display">${esc(p.name)}</h2>
-        <span class="muted small">${esc([p.brand, p.quantity].filter(Boolean).join(" · ")) || (p.manual ? "Recette perso" : p.generic ? GENERIC_LABEL : "")}</span>
-        <span class="chips tight">${nutriChip(p.nutriscore)}<span id="novaHead">${novaChip(novaOf(p))}</span></span>
-      </div>
-      <button type="button" class="iconbtn" id="starBtn" data-act="toggle-save" data-id="${esc(id)}"
-        aria-pressed="${!!stored?.saved}" aria-label="Enregistrer le produit">${stored?.saved ? ICON.starFill : ICON.star}</button>
-    </div>
+    ${productHead(p, id, stored)}
     ${qtyBlock(qty0, qtyPresets(p, stored))}
     <div class="result" id="preview"></div>
     ${mealPicker(ui.mealId, `Repas · ${dayWord}`)}
     <button value="add" class="cta" id="cta">Ajouter</button>
-    ${qualityBlock(p)}
-    ${nutritionLabel(p)}
-    ${p.code && !p.manual ? `<p class="muted small center"><a href="https://world.openfoodfacts.org/product/${esc(p.code)}" target="_blank" rel="noopener">Voir sur Open Food Facts</a></p>` : ""}
-    ${p.generic ? `<p class="muted small center">Valeurs moyennes · <a href="https://ciqual.anses.fr/#/aliments/${esc(p.id.slice(ciqual.PREFIX.length))}" target="_blank" rel="noopener">table Ciqual de l'ANSES</a></p>` : ""}
+    ${productInfo(p)}
   `, (_, fd) => {
     const qty = num(fd.get("qty"));
     if (!qty || qty <= 0) return false;
@@ -1029,22 +1041,20 @@ function editEntry(mealId, entryId) {
   const meal = store.getDay(ui.date).meals.find((m) => m.id === mealId);
   const e = meal?.entries.find((x) => x.id === entryId);
   if (!e) return;
-  const prod = store.getState().products[e.productId];
+  const prod = findProduct(e.productId);
+  // Les valeurs de l'entrée sont figées à l'ajout : on les garde pour que
+  // la fiche corresponde à ce qui est compté dans la journée.
+  const p = { ...(prod ?? { id: e.productId, name: e.name, brand: e.brand }), per100: e.per100 };
   openSheet(`
-    <div class="phead">
-      ${thumb(prod ?? { name: e.name })}
-      <div class="phead-text">
-        <h2 class="display">${esc(e.name)}</h2>
-        <span class="muted small num">${esc(e.brand)}${e.brand ? " · " : ""}${fmt(e.per100.kcal)} kcal / 100 g</span>
-      </div>
-    </div>
-    ${qtyBlock(e.qty, qtyPresets(prod ?? { per100: e.per100 }, null))}
+    ${productHead(p, e.productId, store.getState().products[e.productId])}
+    ${qtyBlock(e.qty, qtyPresets(p, null))}
     <div class="result" id="preview"></div>
     ${mealPicker(mealId, "Repas", false)}
     <div class="sheet-actions">
       <button value="delete" class="btn-outline danger" formnovalidate>Retirer</button>
       <button value="ok" class="cta">Enregistrer</button>
-    </div>`, (action, fd) => {
+    </div>
+    ${productInfo(p)}`, (action, fd) => {
     store.update((s) => {
       const d = store.ensureDay(s, ui.date);
       const from = d.meals.find((m) => m.id === mealId);
@@ -1061,6 +1071,7 @@ function editEntry(mealId, entryId) {
     sheet.querySelectorAll("[data-set-qty]").forEach((c) => c.classList.toggle("on", num(c.dataset.setQty) === q));
   };
   sheet.onPreview();
+  if (prod) ensureQuality(e.productId);
 }
 
 function editActivity(id) {
