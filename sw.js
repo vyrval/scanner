@@ -5,7 +5,8 @@
 // - Open Food Facts : jamais mis en cache ici (l'appli garde déjà les produits).
 
 // La préproduction (/staging/) a son propre cache, que la prod ne touche pas.
-const PREFIX = self.location.pathname.includes("/staging/") ? "carnet-staging-v" : "carnet-v";
+const STAGING = self.location.pathname.includes("/staging/");
+const PREFIX = STAGING ? "carnet-staging-v" : "carnet-v";
 const CACHE = PREFIX + "1";
 const SHELL = [
   "./", "index.html", "manifest.webmanifest", "css/style.css",
@@ -55,6 +56,8 @@ self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
+  // La portée de la prod (/scanner/) englobe /scanner/staging/ : on laisse la préproduction tranquille.
+  if (!STAGING && url.pathname.includes("/staging/")) return;
   if (url.origin === self.location.origin) e.respondWith(networkFirst(req));
   else if (RUNTIME_HOSTS.includes(url.hostname)) e.respondWith(staleWhileRevalidate(req));
   // le reste (Open Food Facts…) passe directement par le réseau
