@@ -87,3 +87,16 @@ export function suggestMealName(time) {
   if (h < 22) return "Dîner";
   return "Collation";
 }
+
+// ---------- Recettes ----------
+// Valeurs pour 100 g d'une recette à partir de ses ingrédients ({ qty, per100 }).
+// weight : poids une fois prête (cuisson, égouttage) ; par défaut la somme des ingrédients.
+// Un nutriment absent de tous les ingrédients reste inconnu (null) plutôt que 0.
+export const recipeWeight = (items) => items.reduce((a, x) => a + (x.qty || 0), 0);
+export function recipePer100(items, weight) {
+  const w = weight || recipeWeight(items);
+  const t = sum(items.map(entryTotals));
+  const o = {};
+  for (const k of KEYS) o[k] = w > 0 && items.some((x) => x.per100?.[k] != null) ? (t[k] * 100) / w : null;
+  return o;
+}

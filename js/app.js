@@ -9,6 +9,7 @@ import { STAGING, NS } from "./env.js";
 import {
   NUTRIENTS, esc, num, fmt, uid, scale, entryTotals, mealTotals, dayTotals,
   burnedKcal, sortMeals, todayKey, addDays, parseKey, keyOf, nowTime, suggestMealName,
+  sum, recipePer100, recipeWeight,
 } from "./util.js";
 
 if (STAGING) document.documentElement.dataset.env = "staging";
@@ -27,6 +28,7 @@ const ui = {
   addMode: (() => { try { const m = localStorage.getItem(`${NS}:addMode`); return ["scan", "search"].includes(m) ? m : "recent"; } catch { return "recent"; } })(),
   pfilter: "",
   ptab: "saved",
+  recipe: null,      // recette en cours de composition (voir « Recettes »)
 };
 const cache = new Map(); // produits vus en recherche, pas encore stockés
 
@@ -400,7 +402,7 @@ function renderAdd() {
   view.innerHTML = `
     <header class="compose-head">
       <button class="iconbtn soft" data-act="close-compose" aria-label="Fermer">${ICON.close}</button>
-      <h1 class="title">Composer le repas</h1>
+      <h1 class="title">${ui.recipe ? "Composer la recette" : "Composer le repas"}</h1>
     </header>
     <section class="card tray" id="tray" aria-live="polite"></section>
     <div class="modes" role="tablist" aria-label="Façon d'ajouter">
@@ -414,9 +416,26 @@ function renderAdd() {
   padForBar();
 }
 
+// Ligne du panier : nom (ouvre la fiche), -/+ 10 g, calories.
+function trayRow(e, editAttrs, products) {
+  return `
+      <div class="tray-row">
+        <button type="button" class="tray-name" ${editAttrs}>
+          ${thumb(products[e.productId] ?? { name: e.name })}<span>${esc(e.name)}</span>
+        </button>
+        <span class="tray-step">
+          <button type="button" data-act="tray-step" data-entry="${e.id}" data-dir="-1" aria-label="Retirer 10 g de ${esc(e.name)}">${ICON.minus}</button>
+          <span class="num">${fmt(e.qty)} g</span>
+          <button type="button" data-act="tray-step" data-entry="${e.id}" data-dir="1" aria-label="Ajouter 10 g de ${esc(e.name)}">${ICON.plus}</button>
+        </span>
+        <span class="num tray-kcal">${fmt(entryTotals(e).kcal)}</span>
+      </div>`;
+}
+
 function renderTray() {
   const el = $("#tray");
   if (!el) return;
+  if (ui.recipe) return renderRecipeTray(el);
   const meal = currentMeal();
   const name = meal?.name ?? suggestMealName(defaultTime());
   const time = meal?.time ?? defaultTime();
@@ -433,18 +452,8 @@ function renderTray() {
       </button>
       <span class="num">${fmt(t.kcal)} kcal</span>
     </div>
-    ${meal?.entries.length ? meal.entries.map((e) => `
-      <div class="tray-row">
-        <button type="button" class="tray-name" data-act="edit-entry" data-meal="${meal.id}" data-entry="${e.id}">
-          ${thumb(products[e.productId] ?? { name: e.name })}<span>${esc(e.name)}</span>
-        </button>
-        <span class="tray-step">
-          <button type="button" data-act="tray-step" data-entry="${e.id}" data-dir="-1" aria-label="Retirer 10 g de ${esc(e.name)}">${ICON.minus}</button>
-          <span class="num">${fmt(e.qty)} g</span>
-          <button type="button" data-act="tray-step" data-entry="${e.id}" data-dir="1" aria-label="Ajouter 10 g de ${esc(e.name)}">${ICON.plus}</button>
-        </span>
-        <span class="num tray-kcal">${fmt(entryTotals(e).kcal)}</span>
-      </div>`).join("")
+    ${meal?.entries.length ? meal.entries.map((e) =>
+      trayRow(e, `data-act="edit-entry" data-meal="${meal.id}" data-entry="${e.id}"`, products)).join("")
       : `<p class="muted small tray-empty">${meal ? "Repas vide." : "Nouveau repas."} Scanne un produit, cherche un aliment ou reprends un de tes récents : chaque ajout arrive ici.</p>`}
     ${meal?.entries.length ? `<div class="tray-foot small muted">
       <span class="num">${fmt(t.prot, 1)} g prot.</span>
@@ -479,6 +488,13 @@ function renderBar() {
     return;
   }
   bar.classList.remove("dock");
+  if (ui.recipe) {
+    const k = ui.recipe.items.length;
+    bar.innerHTML = k
+      ? `<button class="cta wide-cta" data-act="save-recipe" aria-label="Enregistrer la recette, ${k} ingrédient${k > 1 ? "s" : ""}">${ICON.check}<span class="ellipsis">Enregistrer la recette</span><span class="count num">${k}</span></button>`
+      : `<button class="btn-outline wide-cta" data-act="close-compose">Annuler</button>`;
+    return;
+  }
   bar.innerHTML = n
     ? `<button class="cta wide-cta" data-act="close-compose" aria-label="${label}">${ICON.check}<span class="ellipsis">Valider ${esc(toMeal(name).replace(/^(au|à la|à l'|à) /, "le "))}</span><span class="count num">${n}</span></button>`
     : `<button class="btn-outline wide-cta" data-act="close-compose">Terminer</button>`;
@@ -498,6 +514,8 @@ window.visualViewport?.addEventListener("scroll", fitDock);
 document.addEventListener("focusin", (e) => { if (e.target.id === "q") document.body.classList.add("kb"); });
 document.addEventListener("focusout", (e) => { if (e.target.id === "q") document.body.classList.remove("kb"); });
 
+const scanHint = () => `Scan en continu : chaque produit s'ajoute ${ui.recipe ? "à la recette" : "au repas"}`;
+
 function renderModeBody() {
   const el = $("#modeBody");
   if (!el) return;
@@ -515,7 +533,7 @@ function renderModeBody() {
         </div>
         <span class="focus-ring" id="focusRing" hidden></span>
         <div class="vf-bar">
-          <span class="vf-hint" id="vfHint">Scan en continu : chaque produit s'ajoute au repas</span>
+          <span class="vf-hint" id="vfHint">${scanHint()}</span>
           <button class="pill-light" data-act="scan" id="scanBtn">Scanner</button>
           <button class="pill-light" data-act="stop-scan" id="stopBtn" hidden>Pause</button>
         </div>
@@ -552,6 +570,7 @@ function pickMealSheet() {
 }
 
 function trayStep(entryId, dir) {
+  if (ui.recipe) return recipeStep(entryId, dir);
   const meal = currentMeal();
   const e = meal?.entries.find((x) => x.id === entryId);
   if (!e) return;
@@ -569,6 +588,7 @@ function trayStep(entryId, dir) {
 }
 
 function closeCompose() {
+  if (ui.recipe) return ui.recipe.items.length ? recipeSheet() : exitRecipe();
   stopScan();
   const meal = currentMeal();
   go("day");
@@ -578,7 +598,7 @@ function closeCompose() {
 const quickQty = (p) => p.lastQty ?? p.serving ?? 100;
 
 function productRows(items, quick) {
-  const inMeal = new Set((currentMeal()?.entries ?? []).map((e) => e.productId));
+  const inMeal = new Set((ui.recipe?.items ?? currentMeal()?.entries ?? []).map((e) => e.productId));
   return `<div class="stack-8">${items.map((p) => `
     <div class="prow${inMeal.has(p.id) ? " in-meal" : ""}">
       <button class="prow-main" data-act="open-product" data-id="${esc(p.id)}">
@@ -605,9 +625,11 @@ function renderResults() {
       el.innerHTML = `<p class="muted small empty">Tape un aliment ou un produit dans le champ en bas : aliments bruts (table Ciqual) et produits du commerce (Open Food Facts). Un code-barres tapé à la main marche aussi.</p>`;
       return;
     }
+    const mine = ui.results.filter((p) => p.recipe);
     const raw = ui.results.filter((p) => p.generic);
-    const packaged = ui.results.filter((p) => !p.generic);
-    el.innerHTML = (raw.length ? `<span class="eyebrow">Aliments bruts · ${raw.length}</span>${productRows(raw, true)}` : "") +
+    const packaged = ui.results.filter((p) => !p.generic && !p.recipe);
+    el.innerHTML = (mine.length ? `<span class="eyebrow">Mes recettes · ${mine.length}</span>${productRows(mine, true)}` : "") +
+      (raw.length ? `<span class="eyebrow">Aliments bruts · ${raw.length}</span>${productRows(raw, true)}` : "") +
       (ui.searching
         ? `<span class="eyebrow">Produits du commerce</span>${spinner("Recherche dans Open Food Facts…")}`
         : packaged.length || !raw.length ? `<span class="eyebrow">Produits du commerce · ${packaged.length}</span>${productRows(packaged, true)}` : "");
@@ -662,13 +684,16 @@ async function doSearch(q) {
     ui.results = list;
     renderResults();
   };
+  const mine = myRecipes(q);
+  if (mine.length) show(mine);
   const raw = ciqual.search(q).catch(() => []);
-  raw.then((r) => { if (r.length) show(r); });
+  raw.then((r) => { if (r.length) show([...mine, ...r]); });
   const [generic, packaged] = await Promise.all([raw, off.search(q).then((r) => ({ r }), (e) => ({ e }))]);
   if (ui.query !== q) return;
   ui.searching = false;
-  show([...generic, ...(packaged.r ?? [])]);
-  if (packaged.e) setStatus(generic.length ? "Produits du commerce indisponibles pour l'instant (Open Food Facts)." : packaged.e.message, !generic.length);
+  show([...mine, ...generic, ...(packaged.r ?? [])]);
+  const local = mine.length + generic.length;
+  if (packaged.e) setStatus(local ? "Produits du commerce indisponibles pour l'instant (Open Food Facts)." : packaged.e.message, !local);
   else setStatus(ui.results.length ? "" : "Aucun résultat. Essaie un autre mot, ou crée le produit dans Produits.");
 }
 
@@ -698,7 +723,7 @@ function scanUI(on) {
   $("#scanline").hidden = !on;
   $("#scanBtn").hidden = on;
   $("#stopBtn").hidden = !on;
-  $("#vfHint").textContent = on ? "À 15–20 cm · touche l'image pour la mise au point" : "Scan en continu : chaque produit s'ajoute au repas";
+  $("#vfHint").textContent = on ? "À 15–20 cm · touche l'image pour la mise au point" : scanHint();
   if (!on) { cam = null; $("#vfTools").hidden = true; $("#focusRing").hidden = true; }
 }
 
@@ -820,6 +845,7 @@ const storable = (p) => ({
   id: p.id, code: p.code ?? null, name: p.name, brand: p.brand ?? "", quantity: p.quantity ?? "",
   image: p.image ?? "", nutriscore: p.nutriscore ?? "", serving: p.serving ?? null,
   per100: { ...p.per100 }, ...(p.manual ? { manual: true } : {}), ...(p.generic ? { generic: true } : {}),
+  ...(p.recipe ? { recipe: p.recipe } : {}),
   ...(p.quality ? { quality: p.quality, nova: p.quality.nova } : p.nova ? { nova: p.nova } : {}),
 });
 
@@ -894,7 +920,7 @@ function productHead(p, id, stored) {
       ${thumb(p, true)}
       <div class="phead-text">
         <h2 class="display">${esc(p.name)}</h2>
-        <span class="muted small">${esc([p.brand, p.quantity].filter(Boolean).join(" · ")) || (p.manual ? "Recette perso" : p.generic ? GENERIC_LABEL : "")}</span>
+        <span class="muted small">${esc([p.brand, p.quantity].filter(Boolean).join(" · ")) || (p.recipe ? recipeSub(p) : p.manual ? "Produit perso" : p.generic ? GENERIC_LABEL : "")}</span>
         <span class="chips tight">${nutriChip(p.nutriscore)}<span id="novaHead">${novaChip(novaOf(p))}</span></span>
       </div>
       ${findProduct(id) ? `<button type="button" class="iconbtn" id="starBtn" data-act="toggle-save" data-id="${esc(id)}"
@@ -904,10 +930,18 @@ function productHead(p, id, stored) {
 
 function productInfo(p) {
   return `
+    ${recipeBlock(p)}
     ${qualityBlock(p)}
     ${nutritionLabel(p)}
     ${p.code && !p.manual ? `<p class="muted small center"><a href="https://world.openfoodfacts.org/product/${esc(p.code)}" target="_blank" rel="noopener">Voir sur Open Food Facts</a></p>` : ""}
     ${p.generic ? `<p class="muted small center">Valeurs moyennes · <a href="https://ciqual.anses.fr/#/aliments/${esc(p.id.slice(ciqual.PREFIX.length))}" target="_blank" rel="noopener">table Ciqual de l'ANSES</a></p>` : ""}`;
+}
+
+// Aperçu des calories / macros pour la quantité saisie, puce de quantité active.
+function qtyPreview(per100) {
+  const q = num($("#f-qty", sheet).value) ?? 0;
+  $("#preview", sheet).innerHTML = resultGrid(scale(per100, q));
+  sheet.querySelectorAll("[data-set-qty]").forEach((c) => c.classList.toggle("on", num(c.dataset.setQty) === q));
 }
 
 function openProduct(id) {
@@ -921,7 +955,7 @@ function openProduct(id) {
     ${productHead(p, id, stored)}
     ${qtyBlock(qty0, qtyPresets(p, stored))}
     <div class="result" id="preview"></div>
-    ${mealPicker(ui.mealId, `Repas · ${dayWord}`)}
+    ${ui.recipe ? "" : mealPicker(ui.mealId, `Repas · ${dayWord}`)}
     <button value="add" class="cta" id="cta">Ajouter</button>
     ${productInfo(p)}
   `, (_, fd) => {
@@ -931,17 +965,16 @@ function openProduct(id) {
   });
 
   sheet.onPreview = () => {
-    const q = num($("#f-qty", sheet).value) ?? 0;
-    $("#preview", sheet).innerHTML = resultGrid(scale(p.per100, q));
-    sheet.querySelectorAll("[data-set-qty]").forEach((c) => c.classList.toggle("on", num(c.dataset.setQty) === q));
+    qtyPreview(p.per100);
     const choice = new FormData($("form", sheet)).get("meal");
-    $("#cta", sheet).textContent = `Ajouter ${toMeal(mealNameFor(choice))}`;
+    $("#cta", sheet).textContent = ui.recipe ? "Ajouter à la recette" : `Ajouter ${toMeal(mealNameFor(choice))}`;
   };
   sheet.onPreview();
   ensureQuality(id);
 }
 
 function addEntry(p, qty, mealChoice) {
+  if (ui.recipe) return addIngredient(p, qty);
   let mealName = "", mealId = null, created = false;
   const entryId = uid(), date = ui.date;
   store.update((s) => {
@@ -1068,11 +1101,7 @@ function editEntry(mealId, entryId) {
       (d.meals.find((m) => m.id === fd.get("meal")) ?? from).entries.push(entry);
     });
   });
-  sheet.onPreview = () => {
-    const q = num($("#f-qty", sheet).value) ?? 0;
-    $("#preview", sheet).innerHTML = resultGrid(scale(e.per100, q));
-    sheet.querySelectorAll("[data-set-qty]").forEach((c) => c.classList.toggle("on", num(c.dataset.setQty) === q));
-  };
+  sheet.onPreview = () => qtyPreview(e.per100);
   sheet.onPreview();
   if (prod) ensureQuality(e.productId);
 }
@@ -1164,7 +1193,10 @@ function renderProducts() {
   view.innerHTML = `
     <header class="titlebar">
       <h1 class="title">Produits</h1>
-      <button class="btn-ink" data-act="new-product">+ Créer</button>
+      <span class="titlebar-btns">
+        <button class="btn-ink ghost" data-act="new-recipe">+ Recette</button>
+        <button class="btn-ink" data-act="new-product">+ Créer</button>
+      </span>
     </header>
     <label class="field" for="pfilter">${ICON.search}
       <input type="search" id="pfilter" placeholder="Filtrer mes produits" aria-label="Filtrer mes produits" value="${esc(ui.pfilter)}">
@@ -1180,15 +1212,16 @@ function renderPLists() {
   const all = Object.values(store.getState().products);
   const match = (p) => !f || `${p.name} ${p.brand}`.toLowerCase().includes(f);
   const saved = all.filter((p) => p.saved);
+  const recipes = all.filter((p) => p.recipe);
   const used = all.filter((p) => !p.saved);
-  const list = (ui.ptab === "saved" ? saved : used).filter(match)
-    .sort(ui.ptab === "saved" ? (a, b) => a.name.localeCompare(b.name, "fr") : (a, b) => (b.lastUsed ?? 0) - (a.lastUsed ?? 0));
+  const list = ({ saved, recipes, used }[ui.ptab] ?? saved).filter(match)
+    .sort(ui.ptab === "used" ? (a, b) => (b.lastUsed ?? 0) - (a.lastUsed ?? 0) : (a, b) => a.name.localeCompare(b.name, "fr"));
   const sub = (p) => p.manual
-    ? ["Recette perso", p.serving ? `portion ${fmt(p.serving)} g` : ""].filter(Boolean).join(" · ")
+    ? [p.recipe ? recipeSub(p) : "Produit perso", p.serving ? `portion ${fmt(p.serving)} g` : ""].filter(Boolean).join(" · ")
     : p.generic ? GENERIC_LABEL
     : [p.brand, p.quantity].filter(Boolean).join(" · ");
   el.innerHTML =
-    seg("ptab", [["saved", `Enregistrés · ${saved.length}`], ["used", `Déjà utilisés · ${used.length}`]], ui.ptab) +
+    seg("ptab", [["saved", `Enregistrés · ${saved.length}`], ["recipes", `Recettes · ${recipes.length}`], ["used", `Utilisés · ${used.length}`]], ui.ptab) +
     (list.length ? `<div class="card plist">${list.map((p) => `
       <button class="plrow" data-act="open-product" data-id="${esc(p.id)}">
         ${thumb(p)}
@@ -1196,6 +1229,7 @@ function renderPLists() {
         <span class="kcal100 num">${fmt(p.per100.kcal)}<small>kcal/100 g</small></span>
       </button>`).join("")}</div>`
       : `<p class="muted small empty">${f ? "Aucun produit ne correspond."
+        : ui.ptab === "recipes" ? "Aucune recette. « + Recette » regroupe plusieurs aliments (vinaigrette, pâte à crêpes…) pour les ajouter ensuite en un geste, comme un produit."
         : ui.ptab === "saved" ? "Aucun produit enregistré. Crée un plat maison avec « + Créer », ou touche l'étoile sur une fiche produit."
         : "Les produits que tu ajoutes à tes repas apparaîtront ici."}</p>`);
 }
@@ -1226,6 +1260,217 @@ function newProduct() {
     ui.ptab = "saved";
     toast("Produit créé");
   });
+}
+
+// ======================================================================
+// Recettes : plusieurs aliments regroupés en un produit (vinaigrette, pâte
+// à crêpes…). On la compose dans le même écran que les repas (scan,
+// recherche, récents) ; ses valeurs pour 100 g sont calculées à partir des
+// ingrédients, puis elle s'ajoute à un repas comme n'importe quel produit.
+// Le brouillon est gardé à part : rien n'est perdu si l'appli se ferme.
+// ======================================================================
+const DRAFT_KEY = `${NS}:recipeDraft`;
+function saveDraft() {
+  try { ui.recipe ? localStorage.setItem(DRAFT_KEY, JSON.stringify(ui.recipe)) : localStorage.removeItem(DRAFT_KEY); } catch {}
+}
+const loadDraft = () => { try { return JSON.parse(localStorage.getItem(DRAFT_KEY)); } catch { return null; } };
+
+const recipeSub = (p) => { const n = p.recipe.items.length; return `Recette · ${n} ingrédient${n > 1 ? "s" : ""}`; };
+const fold = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const myRecipes = (q) => Object.values(store.getState().products)
+  .filter((p) => p.recipe && fold(p.name).includes(fold(q)))
+  .sort((a, b) => a.name.localeCompare(b.name, "fr"));
+
+function startRecipe(draft) {
+  stopScan();
+  ui.recipe = { ...draft, back: ui.view };
+  ui.results = null;
+  ui.query = "";
+  saveDraft();
+  go("add");
+}
+
+function newRecipe() {
+  const d = loadDraft();
+  if (d?.items?.length) { startRecipe(d); return toast("Recette en cours reprise"); }
+  startRecipe({ id: null, name: "", weight: null, serving: null, items: [] });
+}
+
+function editRecipe(id) {
+  const p = store.getState().products[id];
+  if (!p?.recipe) return;
+  sheet.close();
+  startRecipe({ id, name: p.name, weight: p.recipe.weight ?? null, serving: p.serving ?? null, items: structuredClone(p.recipe.items) });
+}
+
+// Retour à l'écran d'où on est venu (Produits, ou le repas qu'on composait).
+function exitRecipe() {
+  const back = ui.recipe?.back ?? "products";
+  ui.recipe = null;
+  saveDraft();
+  stopScan();
+  if (back === "products") ui.ptab = "recipes";
+  go(back);
+}
+
+const recipeChanged = () => { saveDraft(); renderTray(); renderResults(); };
+
+function addIngredient(p, qty) {
+  const r = ui.recipe;
+  if (p.id === r.id) return toast("Une recette ne peut pas se contenir elle-même");
+  const item = { id: uid(), productId: p.id, name: p.name, brand: p.brand ?? "", qty, per100: { ...p.per100 } };
+  r.items.push(item);
+  saveDraft();
+  // Le produit est gardé (vignette, Produits) sans passer dans les récents des repas.
+  store.update((s) => {
+    const cur = s.products[p.id];
+    const fresh = cache.get(p.id) ?? p;
+    const quality = fresh.quality ?? cur?.quality;
+    s.products[p.id] = { saved: false, ...cur, ...storable({ ...fresh, ...(quality ? { quality } : {}) }) };
+  });
+  toast(`${p.name} · ${fmt(qty)} g ajouté à la recette`, { label: "Annuler", run: () => {
+    if (ui.recipe !== r) return;
+    r.items = r.items.filter((x) => x.id !== item.id);
+    recipeChanged();
+  } });
+}
+
+function recipeStep(entryId, dir) {
+  const r = ui.recipe;
+  const e = r.items.find((x) => x.id === entryId);
+  if (!e) return;
+  const next = Math.round(e.qty / 10) * 10 + 10 * Number(dir);
+  if (next > 0) { e.qty = next; return recipeChanged(); }
+  const idx = r.items.indexOf(e);
+  r.items.splice(idx, 1);
+  recipeChanged();
+  toast(`${e.name} retiré`, { label: "Annuler", run: () => {
+    if (ui.recipe !== r) return;
+    r.items.splice(idx, 0, e);
+    recipeChanged();
+  } });
+}
+
+function renderRecipeTray(el) {
+  const r = ui.recipe;
+  const products = store.getState().products;
+  const t = sum(r.items.map(entryTotals));
+  const per100 = recipePer100(r.items, r.weight);
+  el.innerHTML = `
+    <div class="rule-head">
+      <button type="button" class="linkish tray-meal" data-act="save-recipe" aria-label="Nommer la recette">
+        <h2>${esc(r.name || "Nouvelle recette")}</h2><span class="num muted">${fmt(r.weight || recipeWeight(r.items))} g</span>
+      </button>
+      <span class="num">${fmt(t.kcal)} kcal</span>
+    </div>
+    ${r.items.length ? r.items.map((e) => trayRow(e, `data-act="edit-ingredient" data-entry="${e.id}"`, products)).join("")
+      : `<p class="muted small tray-empty">Ajoute chaque ingrédient avec sa quantité : scanne-le, cherche-le ou reprends un de tes récents. Tu nommeras la recette à la fin.</p>`}
+    ${r.items.length ? `<div class="tray-foot small muted">
+      <span>Pour 100 g : <span class="num ink">${fmt(per100.kcal)} kcal</span></span>
+      <span class="num">${fmt(per100.prot, 1)} g prot. · ${fmt(per100.carbs, 1)} g gluc. · ${fmt(per100.fat, 1)} g lip.</span>
+    </div>` : ""}`;
+  renderBar();
+}
+
+function editIngredient(entryId) {
+  const r = ui.recipe;
+  const e = r?.items.find((x) => x.id === entryId);
+  if (!e) return;
+  const prod = findProduct(e.productId);
+  const p = { ...(prod ?? { id: e.productId, name: e.name, brand: e.brand }), per100: e.per100 };
+  openSheet(`
+    ${productHead(p, e.productId, store.getState().products[e.productId])}
+    ${qtyBlock(e.qty, qtyPresets(p, null))}
+    <div class="result" id="preview"></div>
+    <div class="sheet-actions">
+      <button value="delete" class="btn-outline danger" formnovalidate>Retirer</button>
+      <button value="ok" class="cta">Enregistrer</button>
+    </div>
+    ${productInfo(p)}`, (action, fd) => {
+    if (ui.recipe !== r) return;
+    if (action === "delete") r.items = r.items.filter((x) => x.id !== entryId);
+    else e.qty = num(fd.get("qty")) ?? e.qty;
+    recipeChanged();
+  });
+  sheet.onPreview = () => qtyPreview(e.per100);
+  sheet.onPreview();
+  if (prod) ensureQuality(e.productId);
+}
+
+// Nom, poids une fois prête, portion : puis enregistrement comme produit.
+function recipeSheet() {
+  const r = ui.recipe;
+  if (!r) return;
+  const raw = recipeWeight(r.items);
+  openSheet(`
+    <h2 class="sheet-title">${r.id ? "Modifier la recette" : "Enregistrer la recette"}</h2>
+    <label class="flabel">Nom<input name="name" id="f-rname" required maxlength="60" placeholder="Vinaigrette maison" value="${esc(r.name)}"></label>
+    <div class="grid2">
+      <label class="flabel">Poids prête (g)<input name="weight" id="f-rweight" inputmode="decimal" placeholder="${fmt(raw)}" value="${r.weight ?? ""}"></label>
+      <label class="flabel">Portion (g)<input name="serving" id="f-rserving" inputmode="decimal" placeholder="Facultatif" value="${r.serving ?? ""}"></label>
+    </div>
+    <p class="muted small">Vide = somme des ingrédients (${fmt(raw)} g). Pèse le plat fini si la cuisson fait perdre de l'eau : les valeurs pour 100 g seront justes.</p>
+    <span class="eyebrow">Pour 100 g</span>
+    <div class="result" id="preview"></div>
+    <div class="sheet-actions">
+      <button value="discard" class="btn-outline" formnovalidate>Abandonner</button>
+      <button value="ok" class="cta">Enregistrer</button>
+    </div>
+    ${r.id ? `<button value="delete" class="textbtn danger" formnovalidate>Supprimer la recette…</button>` : ""}`,
+  (action, fd) => {
+    if (action === "discard") {
+      const draft = ui.recipe;
+      exitRecipe();
+      return toast(draft.id ? "Modifications abandonnées" : "Recette abandonnée", { label: "Annuler", run: () => startRecipe(draft) });
+    }
+    if (action === "delete") {
+      const backup = store.getState().products[r.id];
+      exitRecipe();
+      if (!backup) return;
+      store.update((s) => { delete s.products[r.id]; });
+      // les repas déjà saisis gardent leurs valeurs (copie dans chaque entrée)
+      return toast(`${backup.name} supprimée`, { label: "Annuler", run: () => store.update((s) => { s.products[backup.id] = backup; }) });
+    }
+    if (!r.items.length) { toast("Ajoute au moins un ingrédient."); return false; }
+    const w = num(fd.get("weight")), serving = num(fd.get("serving"));
+    const weight = w > 0 ? w : null;
+    const id = r.id ?? "r-" + uid();
+    const name = fd.get("name").trim();
+    store.update((s) => {
+      s.products[id] = {
+        saved: true, ...s.products[id],
+        ...storable({ id, name, serving: serving > 0 ? serving : null, per100: recipePer100(r.items, weight), manual: true,
+          recipe: { items: r.items.map(({ id, productId, name, brand, qty, per100 }) => ({ id, productId, name, brand, qty, per100 })), weight } }),
+      };
+    });
+    exitRecipe();
+    toast(r.id ? `${name} modifiée` : `${name} enregistrée · à retrouver dans Produits et tes enregistrés`);
+  });
+  // Le nom et le poids tapés restent dans le brouillon, même sans enregistrer.
+  sheet.onPreview = () => {
+    r.name = $("#f-rname", sheet).value;
+    const w = num($("#f-rweight", sheet).value);
+    r.weight = w > 0 ? w : null;
+    r.serving = num($("#f-rserving", sheet).value);
+    saveDraft();
+    renderTray();
+    $("#preview", sheet).innerHTML = resultGrid(recipePer100(r.items, r.weight));
+  };
+  sheet.onPreview();
+}
+
+// Ingrédients d'une recette, sur sa fiche.
+function recipeBlock(p) {
+  if (!p.recipe) return "";
+  const raw = recipeWeight(p.recipe.items);
+  return `
+    <section class="quality">
+      <div class="rule-head"><h2>Ingrédients</h2>
+        <span class="num small muted">${fmt(raw)} g${p.recipe.weight ? ` · ${fmt(p.recipe.weight)} g prête` : ""}</span></div>
+      <div class="ingr-list">${p.recipe.items.map((x) =>
+        `<div><span>${esc(x.name)}</span><span class="num">${fmt(x.qty)} g</span></div>`).join("")}</div>
+      ${store.getState().products[p.id] && !ui.recipe ? `<button type="button" class="btn-outline" data-act="edit-recipe" data-id="${esc(p.id)}">Modifier la recette</button>` : ""}
+    </section>`;
 }
 
 // ======================================================================
@@ -1323,7 +1568,7 @@ function openSheet(html, onSubmit) {
     const action = e.submitter?.value ?? "ok";
     if (action === "cancel") return; // fermeture native
     e.preventDefault();
-    if (action !== "delete" && !form.reportValidity()) return;
+    if (action !== "delete" && !e.submitter?.formNoValidate && !form.reportValidity()) return;
     if (onSubmit(action, new FormData(form), form) !== false) sheet.close();
   });
   sheet.showModal();
@@ -1450,6 +1695,10 @@ const actions = {
   "toggle-save": (d) => toggleSave(d.id),
   tab: (d) => { ui[d.group] = d.tab; d.group === "ptab" ? renderPLists() : renderResults(); },
   "new-product": newProduct,
+  "new-recipe": newRecipe,
+  "edit-recipe": (d) => editRecipe(d.id),
+  "edit-ingredient": (d) => editIngredient(d.entry),
+  "save-recipe": recipeSheet,
   export: exportBackup,
   wipe: confirmWipe,
   install,
