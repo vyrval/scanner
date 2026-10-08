@@ -41,3 +41,18 @@ même espace de caches. La séparation repose sur le chemin `/staging/` :
   la version dans les réglages.
 - Le workflow renomme l'appli installée en « … (staging) » / « … β » dans le
   manifeste.
+
+## Licence
+
+Le code est publié sous [PolyForm Noncommercial 1.0.0](LICENSE.md) : libre
+pour un usage personnel ou non commercial (lire, modifier, partager), toute
+utilisation commerciale est réservée à l'auteur. Ce n'est pas une licence
+open source au sens de l'OSI.
+
+Les données tierces gardent leur propre licence :
+
+- `data/ciqual.json` : extrait de la [table Ciqual](https://ciqual.anses.fr)
+  de l'ANSES, Licence Ouverte / Etalab.
+- Données produits interrogées en ligne : [Open Food Facts](https://world.openfoodfacts.org),
+  base sous ODbL, images sous CC BY-SA.
+- Lecteur de code-barres ZXing (chargé depuis jsdelivr) : Apache 2.0.
