@@ -7,12 +7,14 @@
 //   il ne sert plus que de secours. 10 req/min pour la recherche.
 
 import { extractQuality, QUALITY_FIELDS } from "./quality.js";
+import { estimate } from "./glycemic.js";
 
 const BASE_FIELDS = [
   "code", "product_name", "product_name_fr", "brands", "quantity",
   "image_front_small_url", "nutriscore_grade", "nutriments", "serving_quantity",
 ];
-const FIELDS = [...BASE_FIELDS, ...QUALITY_FIELDS].join(",");
+// Catégories en français, de la plus générale à la plus précise : pour estimer l'IG.
+const FIELDS = [...BASE_FIELDS, "categories_tags_fr", ...QUALITY_FIELDS].join(",");
 const SEARCH_FIELDS = [...BASE_FIELDS, "nova_group"].join(",");
 
 const n = (v) => {
@@ -34,16 +36,18 @@ export function normalize(p) {
   const nu = p.nutriments || {};
   const kj = n(nu.energy_100g);
   const grade = text(p.nutriscore_grade).toLowerCase();
+  const name = (text(p.product_name_fr) || text(p.product_name) || "Produit sans nom").trim();
   return {
     id: String(p.code),
     code: String(p.code),
-    name: (text(p.product_name_fr) || text(p.product_name) || "Produit sans nom").trim(),
+    name,
     brand: text(p.brands).split(",")[0].trim(),
     quantity: text(p.quantity),
     image: text(p.image_front_small_url),
     nutriscore: /^[a-e]$/.test(grade) ? grade : "",
     serving: n(p.serving_quantity) || null,
     nova: [1, 2, 3, 4].includes(Number(p.nova_group)) ? Number(p.nova_group) : null,
+    gi: estimate(name, Array.isArray(p.categories_tags_fr) ? p.categories_tags_fr : []),
     per100: {
       kcal: n(nu["energy-kcal_100g"]) ?? (kj != null ? kj / 4.184 : null),
       prot: n(nu.proteins_100g),

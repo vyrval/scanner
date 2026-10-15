@@ -4,6 +4,8 @@
 // première recherche et gardé hors ligne par le service worker.
 // La recherche est locale : instantanée, sans limite de requêtes.
 
+import { estimate } from "./glycemic.js";
+
 export const PREFIX = "ciqual-";
 
 let foods = null; // [{ product, raw, words }]
@@ -67,5 +69,9 @@ export async function search(q, limit = 20) {
     const exact = f.raw.includes(typed[0]) ? 0 : 1;
     hits.push([lead * 2000 + exact * 1000 + f.product.name.length, f.product]);
   }
-  return hits.sort((a, b) => a[0] - b[0]).slice(0, limit).map((h) => h[1]);
+  // IG estimé seulement pour les résultats affichés, pas pour toute la table.
+  return hits.sort((a, b) => a[0] - b[0]).slice(0, limit).map(([, p]) => {
+    if (p.gi === undefined) p.gi = estimate(p.name);
+    return p;
+  });
 }

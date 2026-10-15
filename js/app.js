@@ -4,6 +4,7 @@ import * as ciqual from "./ciqual.js";
 import { startScanner, stopScanner } from "./scanner.js";
 import { ACTIVITY_GROUPS, OTHER, activityInfo, activityKcal } from "./activities.js";
 import { NOVA, QUALITY_VERSION } from "./quality.js";
+import { estimate, giOf, lowCarb, glycemic, recipeGI, giLevel, glLevel, dayGlLevel, levelLabel } from "./glycemic.js";
 import { VERSION } from "./version.js";
 import { STAGING, NS } from "./env.js";
 import {
@@ -163,6 +164,59 @@ function nutritionLabel(p) {
     </div>`;
 }
 
+// ---------- Index et charge glycémiques (option des réglages) ----------
+const glyOn = () => !!store.getState().prefs?.glycemic;
+
+const giChip = (p) => {
+  const g = glyOn() && !lowCarb(p.per100) ? giOf(p) : null;
+  return g ? `<span class="gi gi-${giLevel(g.v)}" title="Index glycémique ${levelLabel(giLevel(g.v))}">IG ${g.manual ? "" : "≈ "}${fmt(g.v)}</span>` : "";
+};
+
+// Ligne sous l'aperçu des calories : IG et charge pour la quantité saisie.
+function glyPreview(p, qty) {
+  if (!glyOn()) return "";
+  let text;
+  if (p.per100?.carbs == null) text = `<span class="muted">Glucides non renseignés : charge glycémique inconnue</span>`;
+  else if (lowCarb(p.per100)) text = `<span class="muted">Très peu de glucides : charge glycémique ≈ 0</span>`;
+  else {
+    const g = giOf(p);
+    if (!g) text = `<span class="muted">Index glycémique inconnu pour cet aliment</span>`;
+    else {
+      const gl = (g.v * p.per100.carbs * qty) / 100 / 100;
+      text = `<span>Charge glycémique <strong class="num gl-${glLevel(gl)}">${fmt(gl)}</strong> · ${levelLabel(glLevel(gl), true)}</span>`;
+    }
+  }
+  return `<div class="result-gly small">${text}</div>`;
+}
+
+// Bloc explicatif de la fiche produit.
+function glyBlock(p) {
+  if (!glyOn()) return "";
+  const g = giOf(p);
+  const low = lowCarb(p.per100);
+  const src = !g ? "" : g.manual ? "Saisi à la main." : g.mix ? "Calculé d'après les ingrédients, pondéré par leurs glucides."
+    : `Estimé d'après la famille « ${esc(g.ref)} » : valeur moyenne publiée, qui varie selon la variété et la cuisson.`;
+  return `
+    <section class="quality" id="glyBlock">
+      <div class="rule-head"><h2>Index glycémique</h2></div>
+      ${low ? `<p class="small">Moins de ${fmt(4)} g de glucides pour 100 g : l'index glycémique n'a pas de sens ici, la charge glycémique est quasi nulle.</p>`
+        : g ? `
+        <div class="nova-row">
+          <span class="gi big gi-${giLevel(g.v)}">${g.manual ? "" : "≈ "}${fmt(g.v)}</span>
+          <div class="stack-2"><strong>IG ${levelLabel(giLevel(g.v))}</strong><span class="muted small">${src}</span></div>
+        </div>`
+        : `<p class="small muted">Index glycémique inconnu pour cet aliment : ses glucides ne sont pas comptés dans la charge glycémique.</p>`}
+      <p class="small muted">L'IG dit à quelle vitesse les glucides font monter la glycémie : bas jusqu'à 55, élevé à partir de 70. La charge glycémique tient compte de la quantité mangée (IG × glucides ÷ 100) : basse jusqu'à 10 par portion, élevée à partir de 20. Ordre de grandeur, pas un avis médical.</p>
+    </section>`;
+}
+
+// Bilan d'un repas ou d'une journée : « IG ≈ 62 · CG 23 ».
+function glySummary(items) {
+  const r = glycemic(items);
+  if (!r.carbs && !r.unknown) return "";
+  return [r.gi != null ? `IG ≈ ${fmt(r.gi)}` : "", `CG ${fmt(r.gl)}`, r.unknown >= 1 ? `${fmt(r.unknown)} g gluc. sans IG` : ""].filter(Boolean).join(" · ");
+}
+
 // ======================================================================
 // Navigation
 // ======================================================================
@@ -214,7 +268,7 @@ function renderDay() {
     <div class="macro">
       <div class="macro-head"><span>${m.label}</span><span class="num">${fmt(t[m.key])}${g[m.key] ? ` / ${fmt(g[m.key])}` : ""} g</span></div>
       ${g[m.key] ? bar(t[m.key], g[m.key], m.key) : ""}
-    </div>`).join("")}</div>`;
+    </div>`).join("")}</div>${glyDay(day, g.gl)}`;
 
   const budgetCard = g.kcal ? `
     <section class="budget">
@@ -246,6 +300,7 @@ function renderDay() {
       <div class="card">
         ${ruleHead(esc(m.name), `<span class="rule-right"><span class="num">${fmt(mealTotals(m).kcal)} kcal</span>
           <button class="more" data-act="edit-meal" data-meal="${m.id}" aria-label="Renommer ou supprimer ${esc(m.name)}">${ICON.more}</button></span>`)}
+        ${glyOn() && glySummary(m.entries) ? `<p class="gly-meal num">${glySummary(m.entries)}</p>` : ""}
         ${m.entries.length ? m.entries.map((e) => `
           <button class="line" data-act="edit-entry" data-meal="${m.id}" data-entry="${e.id}">
             <span class="line-main"><span>${esc(e.name)}</span><small class="num">${fmt(e.qty)} g</small></span>
@@ -293,6 +348,21 @@ function renderDay() {
         </button>`).join("")}
       <button class="dashed" data-act="new-activity">+ Activité</button>
     </section>`;
+}
+
+// Charge glycémique du jour, sous les macros (option des réglages).
+function glyDay(day, goal) {
+  if (!glyOn()) return "";
+  const r = glycemic(day.meals.flatMap((m) => m.entries));
+  const lvl = dayGlLevel(r.gl);
+  const notes = [r.gi != null ? `IG moyen ≈ ${fmt(r.gi)}` : "", r.carbs ? `charge ${levelLabel(lvl, true)}` : "",
+    r.unknown >= 1 ? `${fmt(r.unknown)} g de glucides sans IG connu` : ""].filter(Boolean);
+  return `
+    <div class="gly-day">
+      <div class="macro-head"><span>Charge glycémique</span><span class="num">${fmt(r.gl)}${goal ? ` / ${fmt(goal)}` : ""}</span></div>
+      ${goal ? bar(r.gl, goal, "gl") : ""}
+      ${notes.length ? `<span class="small muted">${notes.join(" · ")}</span>` : ""}
+    </div>`;
 }
 
 // ======================================================================
@@ -844,7 +914,8 @@ function stopScan() { stopScanner(); scanUI(false); }
 const storable = (p) => ({
   id: p.id, code: p.code ?? null, name: p.name, brand: p.brand ?? "", quantity: p.quantity ?? "",
   image: p.image ?? "", nutriscore: p.nutriscore ?? "", serving: p.serving ?? null,
-  per100: { ...p.per100 }, ...(p.manual ? { manual: true } : {}), ...(p.generic ? { generic: true } : {}),
+  per100: { ...p.per100 }, ...(p.gi !== undefined ? { gi: p.gi } : {}),
+  ...(p.manual ? { manual: true } : {}), ...(p.generic ? { generic: true } : {}),
   ...(p.recipe ? { recipe: p.recipe } : {}),
   ...(p.quality ? { quality: p.quality, nova: p.quality.nova } : p.nova ? { nova: p.nova } : {}),
 });
@@ -893,13 +964,22 @@ async function ensureQuality(id) {
     if (!full) throw new Error();
     cache.set(id, { ...p, ...full });
     if (store.getState().products[id]) {
-      store.update((s) => { s.products[id] = { ...s.products[id], quality: full.quality, nova: full.quality.nova }; });
+      store.update((s) => { s.products[id] = { ...s.products[id], quality: full.quality, nova: full.quality.nova, gi: full.gi }; });
     }
     const box = $("#quality", sheet);
     if (sheet.open && box) {
       box.outerHTML = qualityBlock({ ...p, quality: full.quality });
       $("#novaHead", sheet)?.replaceChildren();
       $("#novaHead", sheet)?.insertAdjacentHTML("beforeend", novaChip(full.quality.nova));
+      // Les catégories OFF affinent l'IG estimé d'après le nom seul (sauf entrée de repas, figée).
+      if (!sheet.frozenGi) {
+        $("#giHead", sheet)?.replaceChildren();
+        $("#giHead", sheet)?.insertAdjacentHTML("beforeend", giChip({ ...p, gi: full.gi }));
+        const gb = $("#glyBlock", sheet);
+        if (gb) gb.outerHTML = glyBlock({ ...p, gi: full.gi });
+        sheet.giProduct = { ...p, gi: full.gi };
+        sheet.onPreview?.();
+      }
     }
   } catch {
     const box = $("#quality", sheet);
@@ -921,7 +1001,7 @@ function productHead(p, id, stored) {
       <div class="phead-text">
         <h2 class="display">${esc(p.name)}</h2>
         <span class="muted small">${esc([p.brand, p.quantity].filter(Boolean).join(" · ")) || (p.recipe ? recipeSub(p) : p.manual ? "Produit perso" : p.generic ? GENERIC_LABEL : "")}</span>
-        <span class="chips tight">${nutriChip(p.nutriscore)}<span id="novaHead">${novaChip(novaOf(p))}</span></span>
+        <span class="chips tight">${nutriChip(p.nutriscore)}<span id="novaHead">${novaChip(novaOf(p))}</span><span id="giHead">${giChip(p)}</span></span>
       </div>
       ${findProduct(id) ? `<button type="button" class="iconbtn" id="starBtn" data-act="toggle-save" data-id="${esc(id)}"
         aria-pressed="${!!stored?.saved}" aria-label="Enregistrer le produit">${stored?.saved ? ICON.starFill : ICON.star}</button>` : ""}
@@ -931,16 +1011,17 @@ function productHead(p, id, stored) {
 function productInfo(p) {
   return `
     ${recipeBlock(p)}
+    ${glyBlock(p)}
     ${qualityBlock(p)}
     ${nutritionLabel(p)}
     ${p.code && !p.manual ? `<p class="muted small center"><a href="https://world.openfoodfacts.org/product/${esc(p.code)}" target="_blank" rel="noopener">Voir sur Open Food Facts</a></p>` : ""}
     ${p.generic ? `<p class="muted small center">Valeurs moyennes · <a href="https://ciqual.anses.fr/#/aliments/${esc(p.id.slice(ciqual.PREFIX.length))}" target="_blank" rel="noopener">table Ciqual de l'ANSES</a></p>` : ""}`;
 }
 
-// Aperçu des calories / macros pour la quantité saisie, puce de quantité active.
-function qtyPreview(per100) {
+// Aperçu des calories / macros (et charge glycémique) pour la quantité saisie, puce de quantité active.
+function qtyPreview(p) {
   const q = num($("#f-qty", sheet).value) ?? 0;
-  $("#preview", sheet).innerHTML = resultGrid(scale(per100, q));
+  $("#preview", sheet).innerHTML = resultGrid(scale(p.per100, q)) + glyPreview(p, q);
   sheet.querySelectorAll("[data-set-qty]").forEach((c) => c.classList.toggle("on", num(c.dataset.setQty) === q));
 }
 
@@ -964,8 +1045,10 @@ function openProduct(id) {
     addEntry(p, qty, fd.get("meal"));
   });
 
+  sheet.frozenGi = false;
+  sheet.giProduct = p;
   sheet.onPreview = () => {
-    qtyPreview(p.per100);
+    qtyPreview(sheet.giProduct);
     const choice = new FormData($("form", sheet)).get("meal");
     $("#cta", sheet).textContent = ui.recipe ? "Ajouter à la recette" : `Ajouter ${toMeal(mealNameFor(choice))}`;
   };
@@ -988,9 +1071,9 @@ function addEntry(p, qty, mealChoice) {
     }
     ui.mealId = mealId = meal.id;
     mealName = meal.name;
-    meal.entries.push({ id: entryId, productId: p.id, name: p.name, brand: p.brand ?? "", qty, per100: { ...p.per100 } });
     const cur = s.products[p.id];
     const fresh = cache.get(p.id) ?? p; // peut avoir été complété en arrière-plan
+    meal.entries.push({ id: entryId, productId: p.id, name: p.name, brand: p.brand ?? "", qty, per100: { ...p.per100 }, gi: giOf(fresh) });
     const quality = fresh.quality ?? cur?.quality;
     s.products[p.id] = { ...storable({ ...fresh, ...(quality ? { quality } : {}) }), saved: cur?.saved ?? false, lastUsed: Date.now(), lastQty: qty };
   });
@@ -1080,7 +1163,7 @@ function editEntry(mealId, entryId) {
   const prod = findProduct(e.productId);
   // Les valeurs de l'entrée sont figées à l'ajout : on les garde pour que
   // la fiche corresponde à ce qui est compté dans la journée.
-  const p = { ...(prod ?? { id: e.productId, name: e.name, brand: e.brand }), per100: e.per100 };
+  const p = { ...(prod ?? { id: e.productId, name: e.name, brand: e.brand }), per100: e.per100, gi: giOf(e) };
   openSheet(`
     ${productHead(p, e.productId, store.getState().products[e.productId])}
     ${qtyBlock(e.qty, qtyPresets(p, null))}
@@ -1101,7 +1184,8 @@ function editEntry(mealId, entryId) {
       (d.meals.find((m) => m.id === fd.get("meal")) ?? from).entries.push(entry);
     });
   });
-  sheet.onPreview = () => qtyPreview(e.per100);
+  sheet.frozenGi = true;
+  sheet.onPreview = () => qtyPreview(p);
   sheet.onPreview();
   if (prod) ensureQuality(e.productId);
 }
@@ -1244,22 +1328,37 @@ function newProduct() {
     <div class="grid2">${fields.map(([k, l]) =>
       `<label class="flabel">${l}<input name="${k}" id="f-p${k}" inputmode="decimal"${k === "kcal" ? " required" : ""}></label>`).join("")}
       <label class="flabel">Portion (g)<input name="serving" id="f-pserving" inputmode="decimal" placeholder="Facultatif"></label>
+      ${glyOn() ? `<label class="flabel">Index glycémique<input name="gi" id="f-pgi" inputmode="numeric" placeholder="Estimé"></label>` : ""}
     </div>
+    ${glyOn() ? `<p class="muted small" id="giHint"></p>` : ""}
     <div class="sheet-actions">
       <button value="cancel" class="btn-outline" formnovalidate>Annuler</button>
       <button value="ok" class="cta">Créer</button>
     </div>`, (_, fd) => {
     const id = "m-" + uid();
     const per100 = Object.fromEntries(NUTRIENTS.map((n) => [n.key, num(fd.get(n.key))]));
+    const name = fd.get("name").trim();
+    const typed = num(fd.get("gi"));
+    // IG saisi, sinon estimé d'après le nom (« Lasagnes maison » -> pâtes).
+    const gi = typed > 0 && typed <= 110 ? { v: Math.round(typed), manual: true } : estimate(name);
     store.update((s) => {
       s.products[id] = {
-        ...storable({ id, name: fd.get("name").trim(), brand: fd.get("brand").trim(), serving: num(fd.get("serving")), per100, manual: true }),
+        ...storable({ id, name, brand: fd.get("brand").trim(), serving: num(fd.get("serving")), per100, gi, manual: true }),
         saved: true,
       };
     });
     ui.ptab = "saved";
     toast("Produit créé");
   });
+  // L'estimation d'après le nom s'affiche en indice, qu'on peut remplacer.
+  const hint = $("#giHint", sheet);
+  if (hint) sheet.onPreview = () => {
+    const e = estimate($("#f-pname", sheet).value);
+    $("#f-pgi", sheet).placeholder = e ? `≈ ${e.v}` : "Facultatif";
+    hint.textContent = e ? `IG estimé ≈ ${e.v} d'après « ${e.ref} ». Tape une autre valeur pour le corriger.`
+      : "Index glycémique facultatif : sans valeur, les glucides de ce produit ne comptent pas dans la charge glycémique.";
+  };
+  sheet.onPreview?.();
 }
 
 // ======================================================================
@@ -1318,7 +1417,7 @@ const recipeChanged = () => { saveDraft(); renderTray(); renderResults(); };
 function addIngredient(p, qty) {
   const r = ui.recipe;
   if (p.id === r.id) return toast("Une recette ne peut pas se contenir elle-même");
-  const item = { id: uid(), productId: p.id, name: p.name, brand: p.brand ?? "", qty, per100: { ...p.per100 } };
+  const item = { id: uid(), productId: p.id, name: p.name, brand: p.brand ?? "", qty, per100: { ...p.per100 }, gi: giOf(cache.get(p.id) ?? p) };
   r.items.push(item);
   saveDraft();
   // Le produit est gardé (vignette, Produits) sans passer dans les récents des repas.
@@ -1367,7 +1466,7 @@ function renderRecipeTray(el) {
       : `<p class="muted small tray-empty">Ajoute chaque ingrédient avec sa quantité : scanne-le, cherche-le ou reprends un de tes récents. Tu nommeras la recette à la fin.</p>`}
     ${r.items.length ? `<div class="tray-foot small muted">
       <span>Pour 100 g : <span class="num ink">${fmt(per100.kcal)} kcal</span></span>
-      <span class="num">${fmt(per100.prot, 1)} g prot. · ${fmt(per100.carbs, 1)} g gluc. · ${fmt(per100.fat, 1)} g lip.</span>
+      <span class="num">${fmt(per100.prot, 1)} g prot. · ${fmt(per100.carbs, 1)} g gluc. · ${fmt(per100.fat, 1)} g lip.${glyOn() && recipeGI(r.items) ? ` · IG ≈ ${fmt(recipeGI(r.items).v)}` : ""}</span>
     </div>` : ""}`;
   renderBar();
 }
@@ -1377,7 +1476,7 @@ function editIngredient(entryId) {
   const e = r?.items.find((x) => x.id === entryId);
   if (!e) return;
   const prod = findProduct(e.productId);
-  const p = { ...(prod ?? { id: e.productId, name: e.name, brand: e.brand }), per100: e.per100 };
+  const p = { ...(prod ?? { id: e.productId, name: e.name, brand: e.brand }), per100: e.per100, gi: giOf(e) };
   openSheet(`
     ${productHead(p, e.productId, store.getState().products[e.productId])}
     ${qtyBlock(e.qty, qtyPresets(p, null))}
@@ -1392,7 +1491,8 @@ function editIngredient(entryId) {
     else e.qty = num(fd.get("qty")) ?? e.qty;
     recipeChanged();
   });
-  sheet.onPreview = () => qtyPreview(e.per100);
+  sheet.frozenGi = true;
+  sheet.onPreview = () => qtyPreview(p);
   sheet.onPreview();
   if (prod) ensureQuality(e.productId);
 }
@@ -1439,8 +1539,8 @@ function recipeSheet() {
     store.update((s) => {
       s.products[id] = {
         saved: true, ...s.products[id],
-        ...storable({ id, name, serving: serving > 0 ? serving : null, per100: recipePer100(r.items, weight), manual: true,
-          recipe: { items: r.items.map(({ id, productId, name, brand, qty, per100 }) => ({ id, productId, name, brand, qty, per100 })), weight } }),
+        ...storable({ id, name, serving: serving > 0 ? serving : null, per100: recipePer100(r.items, weight), gi: recipeGI(r.items), manual: true,
+          recipe: { items: r.items.map(({ id, productId, name, brand, qty, per100, gi }) => ({ id, productId, name, brand, qty, per100, gi: giOf({ name, gi }) })), weight } }),
       };
     });
     exitRecipe();
@@ -1454,7 +1554,8 @@ function recipeSheet() {
     r.serving = num($("#f-rserving", sheet).value);
     saveDraft();
     renderTray();
-    $("#preview", sheet).innerHTML = resultGrid(recipePer100(r.items, r.weight));
+    const per100 = recipePer100(r.items, r.weight);
+    $("#preview", sheet).innerHTML = resultGrid(per100) + glyPreview({ per100, gi: recipeGI(r.items) }, 100);
   };
   sheet.onPreview();
 }
@@ -1479,7 +1580,8 @@ function recipeBlock(p) {
 function renderSettings() {
   const s = store.getState();
   const g = s.goals;
-  const rows = [["kcal", "Calories", "kcal", ""], ...MACROS.map((m) => [m.key, m.label, "g", m.key])];
+  const rows = [["kcal", "Calories", "kcal", ""], ...MACROS.map((m) => [m.key, m.label, "g", m.key]),
+    ...(s.prefs?.glycemic ? [["gl", "Charge glycémique", "", "gl"]] : [])];
   view.innerHTML = `
     <header class="pushed">
       <button class="back" data-act="back-day">${ICON.prev}Journée</button>
@@ -1493,14 +1595,22 @@ function renderSettings() {
       </div>
       <p class="muted small note">Sert à estimer les calories de tes activités.</p>
     </section>
+    <section class="card">
+      ${ruleHead("Glycémie")}
+      <label class="goal switch" for="p-gly">
+        <span>Index et charge glycémiques</span>
+        <input type="checkbox" id="p-gly" role="switch"${s.prefs?.glycemic ? " checked" : ""}>
+      </label>
+      <p class="muted small note">Affiche l'index glycémique des aliments et la charge glycémique des repas et de la journée. L'index est estimé d'après des tables publiées (famille d'aliment la plus proche) : c'est un ordre de grandeur, pas un avis médical.</p>
+    </section>
     <form class="card" id="goalsForm">
       ${ruleHead("Objectifs par jour")}
       ${rows.map(([k, l, u, tone]) => `
         <div class="goal">
           <label for="g-${k}">${tone ? `<i class="dot tone-${tone}"></i>` : ""}${l}</label>
-          <span class="goal-in"><input id="g-${k}" name="${k}" inputmode="numeric" value="${g[k] ?? ""}"><span>${u}</span></span>
+          <span class="goal-in"><input id="g-${k}" name="${k}" inputmode="numeric" value="${g[k] ?? ""}"${k === "gl" ? ` placeholder="100"` : ""}><span>${u}</span></span>
         </div>`).join("")}
-      <p class="muted small note">Laisse un champ vide pour ne pas suivre ce nutriment. Les calories du sport s'ajoutent au budget du jour.</p>
+      <p class="muted small note">Laisse un champ vide pour ne pas suivre ce nutriment. Les calories du sport s'ajoutent au budget du jour.${s.prefs?.glycemic ? " Charge glycémique d'une journée : basse sous 80, élevée au-delà de 120." : ""}</p>
       <button class="cta">Enregistrer les objectifs</button>
     </form>
     <section class="card stack-12" id="installCard">${installCardInner()}</section>
@@ -1731,7 +1841,7 @@ document.addEventListener("submit", (e) => {
   } else if (e.target.id === "goalsForm") {
     e.preventDefault();
     const fd = new FormData(e.target);
-    store.update((s) => { for (const k of ["kcal", "prot", "carbs", "fat", "fiber"]) s.goals[k] = num(fd.get(k)); });
+    store.update((s) => { for (const k of ["kcal", "prot", "carbs", "fat", "fiber", "gl"]) if (fd.has(k)) s.goals[k] = num(fd.get(k)); });
     toast("Objectifs enregistrés");
   }
 });
@@ -1747,6 +1857,11 @@ document.addEventListener("change", (e) => {
     const w = num(e.target.value);
     store.update((s) => { s.profile = { ...s.profile, weight: w && w > 0 ? w : null }; });
     toast(w ? "Poids enregistré" : "Poids effacé");
+  }
+  if (e.target.id === "p-gly") {
+    const on = e.target.checked;
+    store.update((s) => { s.prefs = { ...s.prefs, glycemic: on }; });
+    toast(on ? "Index et charge glycémiques affichés" : "Index et charge glycémiques masqués");
   }
   if (e.target.id === "importFile" && e.target.files[0]) { importBackup(e.target.files[0]); e.target.value = ""; }
 });

@@ -56,3 +56,11 @@ Les données tierces gardent leur propre licence :
 - Données produits interrogées en ligne : [Open Food Facts](https://world.openfoodfacts.org),
   base sous ODbL, images sous CC BY-SA.
 - Lecteur de code-barres ZXing (chargé depuis jsdelivr) : Apache 2.0.
+
+L'index glycémique (`js/glycemic.js`) n'est fourni ni par Ciqual ni par Open
+Food Facts : c'est une table propre à l'appli, d'environ 130 familles
+d'aliments, avec des valeurs moyennes publiées (surtout Atkinson, Foster-Powell
+et Brand-Miller, *International Tables of Glycemic Index and Glycemic Load
+Values: 2008*, Diabetes Care 31(12)). Chaque aliment est rapproché d'une
+famille par ses catégories Open Food Facts ou par son nom : c'est un ordre de
+grandeur, affiché comme tel.

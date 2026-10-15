@@ -2,19 +2,21 @@
 //
 // {
 //   version: 1,
-//   goals:    { kcal, prot, carbs, fat, fiber }         (null = non suivi)
+//   goals:    { kcal, prot, carbs, fat, fiber, gl }     (null = non suivi ; gl : charge glycémique)
 //   profile:  { weight }                               (kg)
+//   prefs:    { glycemic }                             (afficher IG et charge glycémique)
 //   lastActivity: clé de la dernière activité saisie
 //   products: { [id]: { id, code, name, brand, quantity, image, nutriscore,
-//                        serving, per100, manual?, generic?, recipe?, saved, lastUsed } }
+//                        serving, per100, gi?, manual?, generic?, recipe?, saved, lastUsed } }
+//                        (gi : index glycémique, voir glycemic.js)
 //                        (generic : aliment brut Ciqual, id « ciqual-<code> »)
-//                        (recipe : { items: [{ id, productId, name, brand, qty, per100 }],
+//                        (recipe : { items: [{ id, productId, name, brand, qty, per100, gi? }],
 //                                    weight } ; produit perso id « r-… », per100 calculé)
 //   days:     { "YYYY-MM-DD": { meals: [{ id, name, time, entries: [
-//                   { id, productId, name, brand, qty, per100 } ] }],
+//                   { id, productId, name, brand, qty, per100, gi? } ] }],
 //                 activities: [{ id, type, name, minutes, kcal, manual }] } }
 // }
-// Chaque entrée garde une copie de per100 : l'historique ne bouge pas
+// Chaque entrée garde une copie de per100 et de gi : l'historique ne bouge pas
 // si la fiche Open Food Facts change.
 
 import { NS } from "./env.js";
@@ -24,8 +26,9 @@ const listeners = new Set();
 
 const defaults = () => ({
   version: 1,
-  goals: { kcal: 2000, prot: 120, carbs: 230, fat: 70, fiber: 30 },
+  goals: { kcal: 2000, prot: 120, carbs: 230, fat: 70, fiber: 30, gl: null },
   profile: { weight: null },   // kg, pour le calcul des activités
+  prefs: { glycemic: false },
   lastActivity: "run-10",
   products: {},
   days: {},

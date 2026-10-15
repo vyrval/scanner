@@ -4,7 +4,7 @@
   --bg: #F2F3EE; --surface: #FFFFFF; --field: #F2F3EE; --track: #E6E9E2; --soft: #EEF0EB;
   --seg: #E3E6DF; --ink: #16181A; --muted: #5E646B; --line: #DADDD6; --dash: #B9BFB5;
   --accent: #17804A; --accent-ink: #0F5E36; --accent-soft: #E1F0E7; --on-accent: #FFFFFF;
-  --prot: #2F5BD3; --carbs: #D08A00; --fat: #9A3F87; --fiber: #5E646B;
+  --prot: #2F5BD3; --carbs: #D08A00; --fat: #9A3F87; --fiber: #5E646B; --gl: #0E7C86;
   --warn: #C2410C; --danger: #B42318; --scrim: rgb(22 24 26 / .5); --glow: rgb(23 128 74 / .35);
   --sans: "Archivo", system-ui, -apple-system, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
@@ -16,7 +16,7 @@
     --bg: #101211; --surface: #1A1D1B; --field: #141715; --track: #2A2F2B; --soft: #242825;
     --seg: #222623; --ink: #ECEFEA; --muted: #9CA59E; --line: #2F3531; --dash: #4B534D;
     --accent: #3FBF7F; --accent-ink: #86DDB0; --accent-soft: #183726; --on-accent: #0B1A12;
-    --prot: #7F9DFF; --carbs: #F0B43C; --fat: #D683C4; --fiber: #9CA59E;
+    --prot: #7F9DFF; --carbs: #F0B43C; --fat: #D683C4; --fiber: #9CA59E; --gl: #4CC9D3;
     --warn: #FB923C; --danger: #FF8A7A; --scrim: rgb(0 0 0 / .6); --glow: rgb(63 191 127 / .25);
     color-scheme: dark;
   }
@@ -128,6 +128,7 @@ svg.filled { fill: var(--accent); stroke: var(--accent); }
 .tone-carbs { background: var(--carbs); }
 .tone-fat { background: var(--fat); }
 .tone-fiber { background: var(--fiber); }
+.tone-gl { background: var(--gl); }
 
 .bar { height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
 .bar i { display: block; height: 100%; border-radius: inherit; transition: width .35s ease; }
@@ -296,7 +297,7 @@ dialog#sheet::backdrop { background: var(--scrim); }
   font-family: var(--sans); font-size: 11px; line-height: 1; font-weight: 800; letter-spacing: .05em;
   text-transform: uppercase; color: #FFFFFF; white-space: nowrap;
 }
-#novaHead { display: contents; }
+#novaHead, #giHead { display: contents; }
 .ns-a { background: #038141; } .ns-b { background: #5E9C1F; } .ns-c { background: #B88600; }
 .ns-d { background: #D46A00; } .ns-e { background: #D63A0E; }
 
@@ -323,6 +324,8 @@ dialog#sheet::backdrop { background: var(--scrim); }
 .result-m { display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; }
 .result-m .num { font-size: 15px; font-weight: 600; }
 .result-m span:last-child { display: flex; align-items: center; gap: 5px; }
+.result-gly { grid-column: 1 / -1; border-top: 1px solid var(--track); padding-top: 10px; }
+.result-gly strong { font-size: 15px; }
 
 .nlabel { border: 2px solid var(--ink); border-radius: 6px; padding: 10px 12px; }
 .nlabel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding-bottom: 4px; border-bottom: 8px solid var(--ink); }
@@ -602,3 +605,28 @@ html[data-env="staging"] body::before {
 /* Recettes : liste des ingrédients sur la fiche */
 .ingr-list > div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--soft); font-size: 14px; }
 .ingr-list > div:last-child { border-bottom: 0; }
+
+/* ---------- Index et charge glycémiques ---------- */
+.gi {
+  display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 12px;
+  font-family: var(--sans); font-size: 11px; line-height: 1; font-weight: 800; letter-spacing: .05em;
+  color: #FFFFFF; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.gi-low { background: var(--n1); } .gi-mid { background: var(--n3); } .gi-high { background: var(--n4); }
+@media (prefers-color-scheme: dark) { .gi { color: #101211; } }
+.gi.big { height: 40px; min-width: 56px; justify-content: center; border-radius: 10px; font-size: 16px; letter-spacing: 0; flex-shrink: 0; }
+.gl-low { color: var(--n1); } .gl-mid { color: var(--n3); } .gl-high { color: var(--n4); }
+.gly-day { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--track); padding-top: 14px; }
+.gly-meal { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
+.switch { cursor: pointer; }
+.switch input {
+  appearance: none; width: 48px; height: 28px; border-radius: 14px; background: var(--track);
+  position: relative; flex-shrink: 0; transition: background .2s; margin: 0;
+}
+.switch input::after {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 11px;
+  background: var(--surface); box-shadow: 0 1px 2px rgb(0 0 0 / .25); transition: transform .2s;
+}
+.switch input:checked { background: var(--accent); }
+.switch input:checked::after { transform: translateX(20px); }
+.switch input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

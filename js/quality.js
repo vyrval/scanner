@@ -29,8 +29,9 @@ const list = (v) => (Array.isArray(v) ? v : []);
 const str = (v) => (typeof v === "string" ? v : Array.isArray(v) ? v.join(", ") : v?.fr ?? v?.main ?? "");
 
 // Version des infos stockées : on recharge les produits enregistrés avec une
-// version plus ancienne (ex. ingrédients mal récupérés avant la v2).
-export const QUALITY_VERSION = 2;
+// version plus ancienne (ex. ingrédients mal récupérés avant la v2, catégories
+// pour estimer l'IG avant la v3).
+export const QUALITY_VERSION = 3;
 
 // Le texte des ingrédients peut être dans plusieurs champs selon les fiches :
 // français, langue principale du produit, anglais, ou seulement la liste détaillée.

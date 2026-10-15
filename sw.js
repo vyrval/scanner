@@ -11,7 +11,7 @@ const CACHE = PREFIX + "1";
 const SHELL = [
   "./", "index.html", "manifest.webmanifest", "css/style.css",
   "js/app.js", "js/store.js", "js/off.js", "js/scanner.js", "js/util.js",
-  "js/activities.js", "js/quality.js", "js/version.js", "js/env.js", "js/ciqual.js", "data/ciqual.json",
+  "js/activities.js", "js/quality.js", "js/version.js", "js/env.js", "js/ciqual.js", "js/glycemic.js", "data/ciqual.json",
   "icons/icon.svg", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png",
 ];
 const RUNTIME_HOSTS = ["fonts.googleapis.com", "fonts.gstatic.com", "cdn.jsdelivr.net"];
