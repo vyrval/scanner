@@ -270,20 +270,24 @@ function renderDay() {
       ${g[m.key] ? bar(t[m.key], g[m.key], m.key) : ""}
     </div>`).join("")}</div>${glyDay(day, g.gl)}`;
 
+  // Anneau : part du budget du jour déjà mangée (sport compris).
+  const pct = budget > 0 ? Math.min(100, (t.kcal / budget) * 100) : 0;
   const budgetCard = g.kcal ? `
     <section class="budget">
       <div class="budget-top">
-        <div class="stack-6">
-          <span class="eyebrow">${left >= 0 ? "Il reste" : "Dépassement"}</span>
-          <div class="bignum${left < 0 ? " warn" : ""}"><span class="display">${fmt(Math.abs(left))}</span><span>kcal</span></div>
+        <div class="ring${left < 0 ? " over" : ""}" style="--p:${pct.toFixed(1)}" role="img"
+          aria-label="${fmt(budget > 0 ? (t.kcal / budget) * 100 : 0)} % du budget">
+          <div class="ring-in">
+            <span class="eyebrow">${left >= 0 ? "Il reste" : "En trop"}</span>
+            <span class="display">${fmt(Math.abs(left))}</span>
+            <span class="small muted">kcal</span>
+          </div>
         </div>
-        <span class="num small muted">${fmt(budget > 0 ? (t.kcal / budget) * 100 : 0)} % du budget</span>
-      </div>
-      ${bar(t.kcal, budget, "accent")}
-      <div class="equation">
-        <div><span class="num">${fmt(g.kcal)}</span><span>Objectif</span></div>
-        <div><span class="num accent">+ ${fmt(burned)}</span><span>Sport</span></div>
-        <div><span class="num">− ${fmt(t.kcal)}</span><span>Mangé</span></div>
+        <div class="equation">
+          <div><i class="eq-ic goal"></i><span class="stack-2"><span class="num">${fmt(g.kcal)}</span><span>Objectif</span></span></div>
+          <div><i class="eq-ic sport"></i><span class="stack-2"><span class="num">+ ${fmt(burned)}</span><span>Sport</span></span></div>
+          <div><i class="eq-ic eaten"></i><span class="stack-2"><span class="num">− ${fmt(t.kcal)}</span><span>Mangé</span></span></div>
+        </div>
       </div>
       ${macros}
     </section>` : `
