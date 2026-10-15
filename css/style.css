@@ -348,12 +348,15 @@ dialog#sheet::backdrop { background: var(--scrim); }
 .result-gly { grid-column: 1 / -1; border-top: 1px solid var(--track); padding-top: 10px; }
 .result-gly strong { font-size: 15px; }
 
-.nlabel { background: var(--field); border-radius: 20px; padding: 14px 16px 8px; }
-.nlabel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding-bottom: 8px; }
-.nlabel-head .display { font-size: 17px; }
-.nlabel-head .num { white-space: nowrap; color: var(--muted); font-size: 13px; }
-.nrow { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
-.nrow.strong { font-weight: 800; font-size: 16px; }
+/* Tableau nutritionnel : on garde l'esprit « étiquette » (cadre, gros traits
+   couleur du texte, donc blancs en mode sombre), le seul endroit en capitales. */
+.nlabel { border: 2px solid var(--ink); border-radius: 10px; padding: 10px 12px; }
+.nlabel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding-bottom: 4px; border-bottom: 8px solid var(--ink); }
+.nlabel-head .display { font-size: 18px; text-transform: uppercase; letter-spacing: .01em; }
+.nlabel-head .num { white-space: nowrap; }
+.nrow { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--ink); font-size: 14px; }
+.nrow:last-child { border-bottom: 0; }
+.nrow.strong { font-weight: 800; font-size: 16px; border-bottom-width: 3px; padding-block: 6px; }
 .nrow.sub { padding-left: 16px; color: var(--muted); }
 
 /* ---------- Barre d'onglets ---------- */
