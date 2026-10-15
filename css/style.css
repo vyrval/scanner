@@ -13,16 +13,15 @@
   --tabbar-h: 86px;
   color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0F1512; --surface: #18201B; --field: #131A16; --track: #26302A; --soft: #212A24;
-    --seg: #1E2621; --ink: #E7EFE9; --muted: #98A69D; --line: #2A342E; --dash: #46524A;
-    --accent: #43C77F; --accent-ink: #8BE0B0; --accent-soft: #183526; --accent-bright: #5FDB95; --on-accent: #08170F;
-    --prot: #7FA4FF; --carbs: #F6B946; --fat: #F28AB0; --fiber: #7BC96B; --gl: #4CC9D3;
-    --warn: #FF9348; --danger: #FF8A7A; --scrim: rgb(0 0 0 / .6); --glow: rgb(67 199 127 / .25);
-    --shadow: 0 1px 2px rgb(0 0 0 / .3);
-    color-scheme: dark;
-  }
+/* Thème sombre : data-theme posé par index.html (réglage Affichage, sinon thème du téléphone). */
+:root[data-theme="dark"] {
+  --bg: #0F1512; --surface: #18201B; --field: #131A16; --track: #26302A; --soft: #212A24;
+  --seg: #1E2621; --ink: #E7EFE9; --muted: #98A69D; --line: #2A342E; --dash: #46524A;
+  --accent: #43C77F; --accent-ink: #8BE0B0; --accent-soft: #183526; --accent-bright: #5FDB95; --on-accent: #08170F;
+  --prot: #7FA4FF; --carbs: #F6B946; --fat: #F28AB0; --fiber: #7BC96B; --gl: #4CC9D3;
+  --warn: #FF9348; --danger: #FF8A7A; --scrim: rgb(0 0 0 / .6); --glow: rgb(67 199 127 / .25);
+  --shadow: 0 1px 2px rgb(0 0 0 / .3);
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -113,7 +112,7 @@ svg.filled { fill: var(--accent); stroke: var(--accent); }
 
 .seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; padding: 4px; background: var(--seg); border-radius: 24px; }
 .seg button { min-height: 40px; border: 0; border-radius: 20px; background: transparent; color: var(--muted); font-size: 14px; font-weight: 700; }
-.seg button[aria-selected="true"] { background: var(--surface); color: var(--accent-ink); box-shadow: 0 1px 3px rgb(29 42 35 / .1); }
+.seg button[aria-selected="true"], .seg button[aria-checked="true"] { background: var(--surface); color: var(--accent-ink); box-shadow: 0 1px 3px rgb(29 42 35 / .1); }
 
 .chips { display: flex; gap: 8px; flex-wrap: wrap; }
 .chip {
@@ -423,7 +422,7 @@ body.no-tabbar #toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); }
 
 /* ---------- Composition / NOVA ---------- */
 :root { --n1: #1E7B34; --n2: #8A6A00; --n3: #C25A00; --n4: #C0262D; --tag-bg: var(--soft); }
-@media (prefers-color-scheme: dark) { :root { --n1: #4CC36A; --n2: #E6C34A; --n3: #FF9A4D; --n4: #FF6B6B; } }
+:root[data-theme="dark"] { --n1: #4CC36A; --n2: #E6C34A; --n3: #FF9A4D; --n4: #FF6B6B; }
 .chips.tight { gap: 6px; }
 .nova-1 { background: #1E7B34; } .nova-2 { background: #8A6A00; } .nova-3 { background: #C25A00; } .nova-4 { background: #C0262D; }
 .quality { display: flex; flex-direction: column; gap: 14px; }
@@ -582,7 +581,7 @@ main:has(.compose-head) ~ #toast { bottom: calc(env(safe-area-inset-bottom, 0px)
   flex-shrink: 0; min-width: 26px; height: 26px; padding: 0 7px; border-radius: 13px;
   background: color-mix(in srgb, var(--on-accent) 22%, transparent); font-size: 14px; display: inline-flex; align-items: center; justify-content: center;
 }
-@media (prefers-color-scheme: dark) { #toast button { color: var(--accent); } }
+:root[data-theme="dark"] #toast button { color: var(--accent); }
 
 
 /* ---------- Mode Chercher : champ en bas, collé au clavier ---------- */
@@ -635,7 +634,7 @@ html[data-env="staging"] body::before {
   color: #FFFFFF; white-space: nowrap; font-variant-numeric: tabular-nums;
 }
 .gi-low { background: var(--n1); } .gi-mid { background: var(--n3); } .gi-high { background: var(--n4); }
-@media (prefers-color-scheme: dark) { .gi { color: #101211; } }
+:root[data-theme="dark"] .gi { color: #101211; }
 .gi.big { height: 40px; min-width: 56px; justify-content: center; border-radius: 10px; font-size: 16px; letter-spacing: 0; flex-shrink: 0; }
 .gl-low { color: var(--n1); } .gl-mid { color: var(--n3); } .gl-high { color: var(--n4); }
 .gly-day { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--track); padding-top: 14px; }
@@ -652,3 +651,7 @@ html[data-env="staging"] body::before {
 .switch input:checked { background: var(--accent); }
 .switch input:checked::after { transform: translateX(20px); }
 .switch input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Onglets en mode sombre : l'option active ressort en vert */
+:root[data-theme="dark"] .seg button[aria-selected="true"],
+:root[data-theme="dark"] .seg button[aria-checked="true"] { background: var(--accent-soft); box-shadow: none; }

@@ -4,8 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
 <title>Carnet nutrition</title>
-<meta name="theme-color" content="#f6f8f4" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0f1512" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f6f8f4">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Carnet">
 <link rel="manifest" href="manifest.webmanifest">
@@ -14,6 +13,18 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400..800&display=swap">
+<script>
+  // Thème posé avant le CSS pour éviter un flash : réglage Affichage de l'appli
+  // (clé « theme », préfixe NS comme dans js/env.js), sinon celui du téléphone.
+  // js/app.js reprend la main ensuite (changement de réglage ou du téléphone).
+  (function () {
+    var ns = location.pathname.indexOf("/staging/") >= 0 ? "carnet-staging" : "carnet", t;
+    try { t = localStorage.getItem(ns + ":theme"); } catch (e) {}
+    var dark = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+    document.querySelector('meta[name="theme-color"]').content = dark ? "#0f1512" : "#f6f8f4";
+  })();
+</script>
 <link rel="stylesheet" href="css/style.css">
 <script>
   // Capté au plus tôt : Chrome peut envoyer la proposition d'installation

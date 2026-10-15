@@ -15,6 +15,25 @@ import {
 
 if (STAGING) document.documentElement.dataset.env = "staging";
 
+// Thème : « auto » suit le téléphone, sinon clair ou sombre forcé (réglage
+// propre à cet appareil, hors sauvegarde). Premier rendu : script de index.html.
+const THEME_KEY = `${NS}:theme`;
+const darkMq = matchMedia("(prefers-color-scheme: dark)");
+const themePref = () => { try { const t = localStorage.getItem(THEME_KEY); return t === "light" || t === "dark" ? t : "auto"; } catch { return "auto"; } };
+function applyTheme() {
+  const p = themePref();
+  const dark = p === "dark" || (p === "auto" && darkMq.matches);
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#0f1512" : "#f6f8f4");
+}
+function setTheme(t) {
+  try { t === "auto" ? localStorage.removeItem(THEME_KEY) : localStorage.setItem(THEME_KEY, t); } catch {}
+  applyTheme();
+  document.querySelectorAll('[data-act="theme"]').forEach((b) => b.setAttribute("aria-checked", String(b.dataset.theme === t)));
+}
+darkMq.addEventListener("change", applyTheme);
+applyTheme();
+
 const $ = (s, root = document) => root.querySelector(s);
 const view = $("#view");
 const sheet = $("#sheet");
@@ -1599,6 +1618,12 @@ function renderSettings() {
       </div>
       <p class="muted small note">Sert à estimer les calories de tes activités.</p>
     </section>
+    <section class="card stack-12">
+      ${ruleHead("Affichage")}
+      <div class="seg" role="radiogroup" aria-label="Thème">${[["auto", "Auto"], ["light", "Clair"], ["dark", "Sombre"]].map(([k, l]) =>
+        `<button type="button" role="radio" aria-checked="${k === themePref()}" data-act="theme" data-theme="${k}">${l}</button>`).join("")}</div>
+      <p class="muted small">Auto suit le thème du téléphone.</p>
+    </section>
     <section class="card">
       ${ruleHead("Glycémie")}
       <label class="goal switch" for="p-gly">
@@ -1809,6 +1834,7 @@ const actions = {
   "toggle-save": (d) => toggleSave(d.id),
   tab: (d) => { ui[d.group] = d.tab; d.group === "ptab" ? renderPLists() : renderResults(); },
   "new-product": newProduct,
+  theme: (d) => setTheme(d.theme),
   "new-recipe": newRecipe,
   "edit-recipe": (d) => editRecipe(d.id),
   "edit-ingredient": (d) => editIngredient(d.entry),
