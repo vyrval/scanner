@@ -303,7 +303,6 @@ function renderDay() {
           </div>
         </div>
         <div class="equation">
-          <div><i class="eq-ic goal"></i><span class="stack-2"><span class="num">${fmt(g.kcal)}</span><span>Objectif</span></span></div>
           <div><i class="eq-ic sport"></i><span class="stack-2"><span class="num">+ ${fmt(burned)}</span><span>Sport</span></span></div>
           <div><i class="eq-ic eaten"></i><span class="stack-2"><span class="num">− ${fmt(t.kcal)}</span><span>Mangé</span></span></div>
         </div>

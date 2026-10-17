@@ -188,7 +188,6 @@ svg.filled { fill: var(--accent); stroke: var(--accent); }
 .equation .num { font-size: 17px; font-weight: 800; }
 .equation .stack-2 > span:last-child { font-size: 12px; color: var(--muted); font-weight: 600; }
 .eq-ic { width: 10px; height: 28px; border-radius: 5px; flex-shrink: 0; }
-.eq-ic.goal { background: var(--track); }
 .eq-ic.sport { background: var(--accent-bright); }
 .eq-ic.eaten { background: var(--accent); }
 @media (max-width: 360px) { .ring { --size: 132px; } .ring-in .display { font-size: 32px; } }
