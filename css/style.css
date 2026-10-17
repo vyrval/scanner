@@ -20,7 +20,7 @@
   --accent: #43C77F; --accent-ink: #8BE0B0; --accent-soft: #183526; --accent-bright: #5FDB95; --on-accent: #08170F;
   --prot: #7FA4FF; --carbs: #F6B946; --fat: #F28AB0; --fiber: #7BC96B; --gl: #4CC9D3;
   --warn: #FF9348; --danger: #FF8A7A; --scrim: rgb(0 0 0 / .6); --glow: rgb(67 199 127 / .25);
-  --shadow: 0 0 0 1px rgb(255 255 255 / .09), 0 1px 3px rgb(0 0 0 / .4); /* liseré fin pour détacher les blocs du fond */
+  --shadow: 0 0 0 1px rgb(255 255 255 / .14), 0 1px 3px rgb(0 0 0 / .4); /* liseré fin pour détacher les blocs du fond */
   color-scheme: dark;
 }
 
