@@ -42,6 +42,7 @@ const ui = {
   view: "day",
   date: todayKey(),
   mealId: null,      // repas cible des ajouts
+  newMeal: null,     // { name, time } choisis pour le repas pas encore créé (null = suggestion)
   query: "",
   results: null,     // résultats de recherche (null = listes récents/enregistrés)
   addTab: "recent",
@@ -75,6 +76,7 @@ const ICON = {
   barcode: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6v12M7 6v12M10.5 6v12M13 6v12M16.5 6v12M20 6v12"/></svg>`,
   torch: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h8l-1 5H9zM9 8h6l-1 6v7h-4v-7z"/><path d="M12 14v2"/></svg>`,
   more: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg>`,
+  edit: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>`,
   trash: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>`,
 };
 
@@ -478,6 +480,10 @@ const ADD_MODES = [
 ];
 
 const currentMeal = () => store.getDay(ui.date).meals.find((m) => m.id === ui.mealId) ?? null;
+// Repas pas encore créé (il le sera au premier aliment) : heure et nom choisis, sinon suggérés.
+const draftTime = () => ui.newMeal?.time || defaultTime();
+const draftName = () => ui.newMeal?.name || suggestMealName(draftTime());
+const MEAL_NAMES = ["Petit-déjeuner", "Déjeuner", "Goûter", "Dîner", "Collation"];
 
 // Depuis le bouton Ajouter : on reprend le repas d'aujourd'hui commencé il y a
 // moins de 90 min (on complète souvent un repas en cours), sinon un nouveau.
@@ -530,8 +536,8 @@ function renderTray() {
   if (!el) return;
   if (ui.recipe) return renderRecipeTray(el);
   const meal = currentMeal();
-  const name = meal?.name ?? suggestMealName(defaultTime());
-  const time = meal?.time ?? defaultTime();
+  const name = meal?.name ?? draftName();
+  const time = meal?.time ?? draftTime();
   const t = meal ? mealTotals(meal) : { kcal: 0, prot: 0 };
   const g = store.getState().goals;
   const day = store.getDay(ui.date);
@@ -540,8 +546,8 @@ function renderTray() {
 
   el.innerHTML = `
     <div class="rule-head label-head">
-      <button type="button" class="linkish tray-meal" data-act="pick-meal" aria-label="Changer de repas">
-        <h2>${esc(name)}</h2><span class="num muted">${time}</span>${ICON.down}
+      <button type="button" class="linkish tray-meal" data-act="pick-meal" aria-label="Renommer ou changer de repas">
+        <h2>${esc(name)}</h2><span class="num muted">${time}</span>${ICON.edit}
       </button>
       <span class="num">${fmt(t.kcal)} kcal</span>
     </div>
@@ -563,7 +569,7 @@ function renderBar() {
   const bar = $("#composeBar");
   if (!bar) return;
   const meal = currentMeal();
-  const name = meal?.name ?? suggestMealName(defaultTime());
+  const name = meal?.name ?? draftName();
   const n = meal?.entries.length ?? 0;
   const label = `Valider le repas, ${n} aliment${n > 1 ? "s" : ""}`;
   if (ui.addMode === "search") {
@@ -649,17 +655,43 @@ function setAddMode(mode) {
   renderModeBody();
 }
 
+// Repas en cours de composition : nom et heure modifiables tout de suite (même
+// s'il n'est pas encore créé), ou bascule vers un autre repas du jour.
 function pickMealSheet() {
-  const meals = sortMeals(store.getDay(ui.date).meals);
+  const meal = currentMeal();
+  const others = sortMeals(store.getDay(ui.date).meals).filter((m) => m.id !== ui.mealId);
   openSheet(`
-    <h2 class="sheet-title">Ajouter à quel repas ?</h2>
+    <h2 class="sheet-title">${meal ? "Modifier le repas" : "Nouveau repas"}</h2>
+    <label class="flabel">Nom<input name="name" id="f-name" required maxlength="40" value="${esc(meal?.name ?? draftName())}"></label>
+    <div class="chips">${MEAL_NAMES.map((n) => `<button type="button" class="chip" data-act="meal-name" data-name="${n}">${n}</button>`).join("")}</div>
+    <label class="flabel">Heure<input name="time" id="f-time" type="time" required value="${meal?.time ?? draftTime()}"></label>
+    <button value="ok" class="cta">Enregistrer</button>
+    ${others.length || meal ? `
+    <span class="eyebrow">Ou ajouter à un autre repas</span>
     <div class="stack-8">
-      ${meals.map((m) => `<button type="button" class="meal-choice${m.id === ui.mealId ? " on" : ""}" data-act="choose-meal" data-meal="${m.id}">
+      ${others.map((m) => `<button type="button" class="meal-choice" data-act="choose-meal" data-meal="${m.id}">
         <span><strong>${esc(m.name)}</strong> <span class="num muted">${m.time}</span></span><span class="num">${fmt(mealTotals(m).kcal)} kcal</span></button>`).join("")}
-      <button type="button" class="meal-choice new${ui.mealId ? "" : " on"}" data-act="choose-meal" data-meal="">
-        <span><strong>Nouveau repas</strong> <span class="muted">· ${esc(suggestMealName(defaultTime()))} ${defaultTime()}</span></span>${ICON.plus}</button>
-    </div>
-    <p class="muted small">Pour renommer un repas ou changer son heure : bouton ⋯ dans la Journée.</p>`, () => {});
+      ${meal ? `<button type="button" class="meal-choice new" data-act="choose-meal" data-meal="">
+        <span><strong>Nouveau repas</strong> <span class="muted">· ${esc(suggestMealName(defaultTime()))} ${defaultTime()}</span></span>${ICON.plus}</button>` : ""}
+    </div>` : ""}`, (_, fd) => {
+    const name = fd.get("name").trim(), time = fd.get("time");
+    if (!name || !time) return false;
+    if (meal) {
+      store.update((s) => {
+        const m = store.ensureDay(s, ui.date).meals.find((x) => x.id === meal.id);
+        if (m) { m.name = name; m.time = time; }
+      });
+    } else {
+      ui.newMeal = { name, time };
+      renderTray();
+      renderResults();
+    }
+  });
+  sheet.onPreview = () => {
+    const v = $("#f-name", sheet).value.trim();
+    sheet.querySelectorAll('[data-act="meal-name"]').forEach((c) => c.classList.toggle("on", c.dataset.name === v));
+  };
+  sheet.onPreview();
 }
 
 function trayStep(entryId, dir) {
@@ -1012,7 +1044,7 @@ async function ensureQuality(id) {
 
 function mealNameFor(choice) {
   const m = store.getDay(ui.date).meals.find((x) => x.id === choice);
-  return m ? m.name : suggestMealName(defaultTime());
+  return m ? m.name : draftName();
 }
 
 // En-tête et infos communes à la fiche produit, qu'on ajoute le produit
@@ -1081,19 +1113,20 @@ function openProduct(id) {
 
 function addEntry(p, qty, mealChoice) {
   if (ui.recipe) return addIngredient(p, qty);
-  let mealName = "", mealId = null, created = false;
+  let mealName = "", mealTime = "", mealId = null, created = false;
   const entryId = uid(), date = ui.date;
   store.update((s) => {
     const d = store.ensureDay(s, ui.date);
     let meal = d.meals.find((m) => m.id === mealChoice);
     if (!meal) {
-      const time = defaultTime();
-      meal = { id: uid(), name: suggestMealName(time), time, entries: [] };
+      meal = { id: uid(), name: draftName(), time: draftTime(), entries: [] };
       d.meals.push(meal);
+      ui.newMeal = null;
       created = true;
     }
     ui.mealId = mealId = meal.id;
     mealName = meal.name;
+    mealTime = meal.time;
     const cur = s.products[p.id];
     const fresh = cache.get(p.id) ?? p; // peut avoir été complété en arrière-plan
     meal.entries.push({ id: entryId, productId: p.id, name: p.name, brand: p.brand ?? "", qty, per100: { ...p.per100 }, gi: giOf(fresh) });
@@ -1109,7 +1142,8 @@ function addEntry(p, qty, mealChoice) {
       if (created && !m.entries.length) d.meals = d.meals.filter((x) => x.id !== mealId);
       store.pruneDay(s, date);
     });
-    if (created && !store.getDay(date).meals.some((m) => m.id === mealId)) { ui.mealId = null; renderTray(); }
+    // repas retiré avec son seul aliment : on garde le nom et l'heure choisis pour le prochain ajout
+    if (created && !store.getDay(date).meals.some((m) => m.id === mealId)) { ui.mealId = null; ui.newMeal = { name: mealName, time: mealTime }; renderTray(); }
   } });
 }
 
@@ -1135,9 +1169,11 @@ function toggleSave(id) {
 // ======================================================================
 // Pas de formulaire : on va direct à l'ajout d'aliments. Le repas (nom
 // suggéré selon l'heure) n'est créé qu'au premier aliment ajouté, donc
-// pas de repas vide si on revient en arrière. Renommer : bouton ⋯.
+// pas de repas vide si on revient en arrière. Nom et heure : en touchant le
+// titre du panier, ou plus tard avec le bouton ⋯ de la Journée.
 function newMeal() {
   ui.mealId = null;
+  ui.newMeal = null;
   ui.results = null;
   ui.query = "";
   go("add");
@@ -1816,10 +1852,11 @@ const actions = {
   "back-day": () => go("day"),
   "new-meal": newMeal,
   "edit-meal": (d) => editMeal(d.meal),
-  "add-to-meal": (d) => { ui.mealId = d.meal; ui.results = null; ui.query = ""; go("add"); },
+  "add-to-meal": (d) => { ui.mealId = d.meal; ui.newMeal = null; ui.results = null; ui.query = ""; go("add"); },
   "add-mode": (d) => setAddMode(d.mode),
   "pick-meal": pickMealSheet,
-  "choose-meal": (d) => { ui.mealId = d.meal || null; sheet.close(); renderTray(); renderResults(); },
+  "choose-meal": (d) => { ui.mealId = d.meal || null; ui.newMeal = null; sheet.close(); renderTray(); renderResults(); },
+  "meal-name": (d) => { $("#f-name", sheet).value = d.name; sheet.onPreview?.(); },
   "tray-step": (d) => trayStep(d.entry, d.dir),
   "close-compose": closeCompose,
   "edit-entry": (d) => editEntry(d.meal, d.entry),
@@ -1851,7 +1888,7 @@ document.addEventListener("click", (e) => {
   if (!b) return;
   if (b.dataset.nav) {
     if (sheet.open) sheet.close();
-    if (b.dataset.nav === "add" && ui.view !== "add") { ui.results = null; ui.query = ""; ui.mealId = guessMeal(); }
+    if (b.dataset.nav === "add" && ui.view !== "add") { ui.results = null; ui.query = ""; ui.mealId = guessMeal(); ui.newMeal = null; }
     return go(b.dataset.nav);
   }
   if (b.dataset.setQty || b.dataset.step) {
