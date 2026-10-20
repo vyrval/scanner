@@ -125,8 +125,8 @@ const nutriChip = (g) => (g ? `<span class="ns ns-${g}">Nutri-Score ${g.toUpperC
 const seg = (group, tabs, cur) => `<div class="seg" role="tablist">${tabs.map(([k, label]) =>
   `<button role="tab" aria-selected="${k === cur}" data-act="tab" data-group="${group}" data-tab="${k}">${label}</button>`).join("")}</div>`;
 
-const ruleHead = (title, right = "", titleAttrs = "") => `
-  <div class="rule-head">
+const ruleHead = (title, right = "", titleAttrs = "", cls = "") => `
+  <div class="rule-head${cls ? ` ${cls}` : ""}">
     ${titleAttrs ? `<button class="linkish" ${titleAttrs}><h2>${title}</h2></button>` : `<h2>${title}</h2>`}
     ${right}
   </div>`;
@@ -299,10 +299,11 @@ function renderDay() {
           <div class="ring-in">
             <span class="eyebrow">${left >= 0 ? "Il reste" : "En trop"}</span>
             <span class="display">${fmt(Math.abs(left))}</span>
-            <span class="small muted">kcal</span>
+            <span class="small muted">sur <span class="num">${fmt(budget)}</span> kcal</span>
           </div>
         </div>
         <div class="equation">
+          <p class="eq-goal">Objectif <span class="num">${fmt(g.kcal)}</span> kcal</p>
           <div><i class="eq-ic sport"></i><span class="stack-2"><span class="num">+ ${fmt(burned)}</span><span>Sport</span></span></div>
           <div><i class="eq-ic eaten"></i><span class="stack-2"><span class="num">− ${fmt(t.kcal)}</span><span>Mangé</span></span></div>
         </div>
@@ -321,7 +322,7 @@ function renderDay() {
       <div class="tl-rail"><span class="num">${m.time}</span><i></i></div>
       <div class="card">
         ${ruleHead(esc(m.name), `<span class="rule-right"><span class="num">${fmt(mealTotals(m).kcal)} kcal</span>
-          <button class="more" data-act="edit-meal" data-meal="${m.id}" aria-label="Renommer ou supprimer ${esc(m.name)}">${ICON.more}</button></span>`)}
+          <button class="more" data-act="edit-meal" data-meal="${m.id}" aria-label="Renommer ou supprimer ${esc(m.name)}">${ICON.more}</button></span>`, "", "label-head")}
         ${glyOn() && glySummary(m.entries) ? `<p class="gly-meal num">${glySummary(m.entries)}</p>` : ""}
         ${m.entries.length ? m.entries.map((e) => `
           <button class="line" data-act="edit-entry" data-meal="${m.id}" data-entry="${e.id}">
@@ -538,7 +539,7 @@ function renderTray() {
   const products = store.getState().products;
 
   el.innerHTML = `
-    <div class="rule-head">
+    <div class="rule-head label-head">
       <button type="button" class="linkish tray-meal" data-act="pick-meal" aria-label="Changer de repas">
         <h2>${esc(name)}</h2><span class="num muted">${time}</span>${ICON.down}
       </button>
@@ -957,7 +958,7 @@ function qualityBlock(p) {
   ].join("");
   return `
     <section class="quality" id="quality">
-      <div class="rule-head"><h2>Composition</h2></div>
+      <div class="rule-head label-head"><h2>Composition</h2></div>
       ${nova ? `
         <div class="nova-row">
           <span class="nova-scale" aria-hidden="true">${[1, 2, 3, 4].map((g) => `<i class="${g === nova ? `on nova-${g}` : ""}">${g}</i>`).join("")}</span>

@@ -4,12 +4,15 @@
 :root {
   --bg: #F6F8F4; --surface: #FFFFFF; --field: #F1F5EE; --track: #E8EEE5; --soft: #EFF3EC;
   --seg: #E9EFE6; --ink: #1D2A23; --muted: #67756C; --line: #E1E8DD; --dash: #C3CFBF;
-  --accent: #178A4C; --accent-ink: #106B3A; --accent-soft: #E2F4E8; --accent-bright: #3CC174; --on-accent: #FFFFFF;
+  --accent: #15804A; --accent-ink: #106B3A; --accent-soft: #E2F4E8; --accent-bright: #3CC174; --on-accent: #FFFFFF;
   --prot: #3B78F2; --carbs: #F29D0C; --fat: #E5568A; --fiber: #57AE45; --gl: #0E95A3;
-  --warn: #E5560B; --danger: #CF2C1F; --scrim: rgb(29 42 35 / .42); --glow: rgb(23 138 76 / .32);
+  --warn: #E5560B; --danger: #CF2C1F; --scrim: rgb(29 42 35 / .42); --glow: rgb(21 128 74 / .3);
   --shadow: 0 1px 2px rgb(29 42 35 / .04), 0 6px 20px rgb(29 42 35 / .06);
   --sans: "Manrope", system-ui, -apple-system, sans-serif;
   --mono: var(--sans);
+  /* Étiquette nutritionnelle : typo des emballages (capitales étroites, chiffres à chasse fixe) */
+  --label-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --label-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
   --tabbar-h: 86px;
   color-scheme: light;
 }
@@ -90,7 +93,7 @@ svg.filled { fill: var(--accent); stroke: var(--accent); }
 .textbtn { align-self: flex-start; min-height: 44px; padding: 0; border: 0; background: none; font-size: 14px; font-weight: 700; }
 .dashed {
   align-self: flex-start; margin-top: 8px; min-height: 44px; padding: 0 16px; border-radius: 22px;
-  border: 0; background: var(--accent-soft); color: var(--accent-ink); font-size: 14px; font-weight: 800;
+  border: 1.5px dashed var(--dash); background: transparent; color: var(--ink); font-size: 14px; font-weight: 800;
 }
 
 .field {
@@ -112,7 +115,7 @@ svg.filled { fill: var(--accent); stroke: var(--accent); }
 
 .seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; padding: 4px; background: var(--seg); border-radius: 24px; }
 .seg button { min-height: 40px; border: 0; border-radius: 20px; background: transparent; color: var(--muted); font-size: 14px; font-weight: 700; }
-.seg button[aria-selected="true"], .seg button[aria-checked="true"] { background: var(--surface); color: var(--accent-ink); box-shadow: 0 1px 3px rgb(29 42 35 / .1); }
+.seg button[aria-selected="true"], .seg button[aria-checked="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgb(29 42 35 / .1); }
 
 .chips { display: flex; gap: 8px; flex-wrap: wrap; }
 .chip {
@@ -120,9 +123,9 @@ svg.filled { fill: var(--accent); stroke: var(--accent); }
   background: var(--surface); color: var(--ink); font-size: 14px; font-weight: 700;
   display: inline-flex; align-items: center; cursor: pointer;
 }
-.chip.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.chip.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .chip.radio input { position: absolute; opacity: 0; pointer-events: none; }
-.chip.radio:has(input:checked) { border: 1.5px solid var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
+.chip.radio:has(input:checked) { border: 1.5px solid var(--ink); background: var(--surface); color: var(--ink); }
 .chip.radio:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 .chip.new { border-style: dashed; border-color: var(--dash); background: transparent; }
 
@@ -205,7 +208,7 @@ svg.filled { fill: var(--accent); stroke: var(--accent); }
 .tl-rail .num { font-size: 12px; color: var(--muted); font-weight: 700; }
 .tl-rail i { width: 2px; flex-grow: 1; background: linear-gradient(var(--accent-soft), transparent); border-radius: 1px; }
 .suggest {
-  min-height: 64px; border-radius: 22px; border: 1.5px dashed color-mix(in srgb, var(--accent) 35%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 45%, transparent); color: var(--ink);
+  min-height: 64px; border-radius: 22px; border: 1.5px dashed var(--dash); background: transparent; color: var(--ink);
   padding: 10px 12px 10px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left;
 }
 .suggest .display { font-size: 18px; }
@@ -255,9 +258,10 @@ img.thumb { background: #FFFFFF; }
 .pname { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .prow-text small { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .quick {
-  min-height: 44px; flex-shrink: 0; padding: 0 12px; border: 0; border-radius: 22px;
-  background: var(--accent-soft); color: var(--accent-ink); font-size: 13px; font-weight: 800;
+  min-height: 44px; flex-shrink: 0; padding: 0 12px; border: 1.5px solid var(--line); border-radius: 22px;
+  background: var(--surface); color: var(--ink); font-size: 13px; font-weight: 800;
 }
+.prow.in-meal .quick { border-color: transparent; background: var(--accent-soft); color: var(--accent-ink); }
 
 /* ---------- Produits ---------- */
 .titlebar { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
@@ -323,7 +327,7 @@ dialog#sheet::backdrop { background: var(--scrim); }
 .stepper { display: flex; align-items: center; gap: 10px; }
 .stepbtn {
   width: 56px; height: 56px; flex-shrink: 0; padding: 0; border: 0; border-radius: 28px;
-  background: var(--accent-soft); color: var(--accent-ink); display: flex; align-items: center; justify-content: center;
+  background: var(--seg); color: var(--ink); display: flex; align-items: center; justify-content: center;
 }
 .qtybox {
   flex-grow: 1; min-width: 0; height: 56px; border-radius: 28px; background: var(--field);
@@ -348,9 +352,11 @@ dialog#sheet::backdrop { background: var(--scrim); }
 
 /* Tableau nutritionnel : on garde l'esprit « étiquette » (cadre, gros traits
    couleur du texte, donc blancs en mode sombre), le seul endroit en capitales. */
-.nlabel { border: 2px solid var(--ink); border-radius: 10px; padding: 10px 12px; }
+.nlabel { border: 2px solid var(--ink); border-radius: 6px; padding: 10px 12px; }
 .nlabel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding-bottom: 4px; border-bottom: 8px solid var(--ink); }
-.nlabel-head .display { font-size: 18px; text-transform: uppercase; letter-spacing: .01em; }
+.nlabel-head .display { font-family: var(--label-display); font-size: 19px; line-height: 1.05; font-weight: 800; font-stretch: 75%; text-transform: uppercase; letter-spacing: 0; }
+.nlabel .num { font-family: var(--label-mono); font-weight: 500; letter-spacing: 0; }
+.nlabel .nrow.strong .num { font-weight: 600; }
 .nlabel-head .num { white-space: nowrap; }
 .nrow { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--ink); font-size: 14px; }
 .nrow:last-child { border-bottom: 0; }
@@ -449,7 +455,7 @@ body.no-tabbar #toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); }
 .close {
   position: absolute; right: -6px; top: 50%; transform: translateY(-50%);
   width: 40px; height: 40px; padding: 0; border: 0; border-radius: 20px;
-  background: var(--soft); color: var(--ink); display: flex; align-items: center; justify-content: center;
+  background: var(--seg); color: var(--ink); display: flex; align-items: center; justify-content: center;
 }
 .close svg { width: 20px; height: 20px; stroke-width: 2.2; }
 .sheet-top { touch-action: none; cursor: grab; }
@@ -502,12 +508,12 @@ body.no-tabbar #toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); }
 .cal-day .dot { width: 7px; height: 7px; border-radius: 4px; }
 .cal-day.is-future { color: var(--muted); }
 .cal-day.is-today { box-shadow: inset 0 0 0 2px var(--accent); }
-.cal-day.is-sel { background: var(--accent); color: var(--on-accent); }
+.cal-day.is-sel { background: var(--ink); color: var(--bg); }
 .cal-day.is-sel .num { font-weight: 700; }
 .dot.st-ok { background: var(--accent); }
 .dot.st-over { background: var(--warn); }
 .dot.st-logged { background: var(--muted); }
-.cal-day.is-sel .dot { background: var(--on-accent); }
+.cal-day.is-sel .dot { background: var(--bg); }
 .cal-legend { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
 .cal-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .cal-legend .dot { width: 8px; height: 8px; border-radius: 4px; }
@@ -529,7 +535,7 @@ body.no-tabbar #toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); }
 .tray-name span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tray-name .thumb { width: 36px; height: 36px; border-radius: 12px; font-size: 16px; }
 .tray-step { display: flex; align-items: center; height: 38px; background: var(--field); border-radius: 19px; flex-shrink: 0; }
-.tray-step button { width: 36px; height: 36px; border: 0; background: none; color: var(--accent-ink); padding: 0; display: flex; align-items: center; justify-content: center; }
+.tray-step button { width: 36px; height: 36px; border: 0; background: none; color: var(--ink); padding: 0; display: flex; align-items: center; justify-content: center; }
 .tray-step button svg { width: 16px; height: 16px; stroke-width: 2.2; }
 .tray-step .num { min-width: 48px; text-align: center; font-size: 13px; }
 .tray-kcal { width: 40px; text-align: right; font-size: 14px; flex-shrink: 0; }
@@ -543,7 +549,7 @@ body.no-tabbar #toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); }
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 13px; font-weight: 700;
 }
 .mode svg { width: 22px; height: 22px; }
-.mode[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); box-shadow: 0 6px 16px var(--glow); }
+.mode[aria-pressed="true"] { background: var(--ink); color: var(--bg); box-shadow: none; }
 
 .viewfinder.compact { height: 170px; }
 .viewfinder.compact .ghostcode { width: 140px; height: 58px; margin-top: -30px; }
@@ -551,7 +557,7 @@ body.no-tabbar #toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); }
 .viewfinder.compact .c-bl, .viewfinder.compact .c-br { bottom: 58px; }
 .viewfinder.compact .scanline { top: 70px; }
 
-.prow.in-meal { box-shadow: inset 0 0 0 2px var(--accent); }
+.prow.in-meal { box-shadow: inset 0 0 0 2px var(--accent-bright), var(--shadow); }
 .quick svg { width: 14px; height: 14px; stroke-width: 2.6; vertical-align: -2px; }
 
 .compose-bar {
@@ -571,9 +577,9 @@ main:has(.compose-head) ~ #toast { bottom: calc(env(safe-area-inset-bottom, 0px)
   width: 100%; min-height: 56px; padding: 0 16px; border: 1.5px solid var(--line); border-radius: 18px;
   background: var(--surface); color: var(--ink); display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; font-size: 15px;
 }
-.meal-choice.on { border-color: var(--accent); background: var(--accent-soft); }
+.meal-choice.on { border-color: var(--ink); background: var(--surface); }
 .meal-choice.new { border-style: dashed; border-color: var(--dash); }
-.meal-choice.new.on { border-style: solid; border-color: var(--accent); }
+.meal-choice.new.on { border-style: solid; border-color: var(--ink); }
 .meal-choice svg { width: 18px; height: 18px; }
 .wide-cta .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .wide-cta .count {
@@ -651,6 +657,15 @@ html[data-env="staging"] body::before {
 .switch input:checked::after { transform: translateX(20px); }
 .switch input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* Onglets en mode sombre : l'option active ressort en vert */
+/* Onglets en mode sombre : l'option active ressort sur le fond */
 :root[data-theme="dark"] .seg button[aria-selected="true"],
-:root[data-theme="dark"] .seg button[aria-checked="true"] { background: var(--accent-soft); box-shadow: none; }
+:root[data-theme="dark"] .seg button[aria-checked="true"] { background: var(--soft); box-shadow: none; }
+
+/* ---------- Objectif dans la carte du jour ---------- */
+.eq-goal { font-size: 13px; color: var(--muted); font-weight: 600; padding-bottom: 10px; border-bottom: 1px solid var(--track); }
+.eq-goal .num { color: var(--ink); font-weight: 800; }
+
+/* ---------- Titres « étiquette » : repas et composition ---------- */
+.rule-head.label-head { border-bottom: 3px solid var(--ink); padding-bottom: 6px; }
+.rule-head.label-head h2 { font-size: 18px; text-transform: uppercase; letter-spacing: .02em; }
+.rule-head.label-head .num { color: var(--ink); font-weight: 800; }
